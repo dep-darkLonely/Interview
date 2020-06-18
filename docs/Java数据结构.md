@@ -1,23 +1,24 @@
-### JAVA 数据结构
+# JAVA 数据结构
 
 - ArrayList 源码分析
   
     ```JAVA
-    public static void main(String[] args) {
-		// 实例化一个为空的Object对象数组
-		List<String> list = new ArrayList<>();
-	
-		/* 1.  ArrayList 底层实现采用的是Object[]数组
-		 * 2.  ArrayList 添加元素到Object[]数组时，若数组长度为0，则初始化Object[]数组容量为10
-		 * 3.  ArrayList 扩容实现步骤：
-		 * 		-> 1. 扩容： 数组的默认大小为10，将数组的容量每次扩充为原来数组内容的1.5倍
-		 * 		-> 2. 复制:  把原数组的内容复制到新数组中
-		 */
-		list.add("1");
-		...
-		list.add("11");
-    }
+        public static void main(String[] args) {
+            // 实例化一个为空的Object对象数组
+            List<String> list = new ArrayList<>();
+
+            /* 1.  ArrayList 底层实现采用的是Object[]数组
+            * 2.  ArrayList 添加元素到Object[]数组时，若数组长度为0，则初始化Object[]数组容量为10
+            * 3.  ArrayList 扩容实现步骤：
+            * 		-> 1. 扩容： 数组的默认大小为10，将数组的容量每次扩充为原来数组内容的1.5倍
+            * 		-> 2. 复制:  把原数组的内容复制到新数组中
+            */
+            list.add("1");
+            ...
+            list.add("11");
+        }
     ```
+
     源码分析①:
     ```JAVA
     java.util.ArrayList#ArrayList()

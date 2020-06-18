@@ -1,15 +1,16 @@
 <!-- 封面页 -->
 
-![logo](./logo/logo.jpeg)
+![logo](./Image/logo.jpeg)
 
 
-# Java Data <small>1.0</small>
+# Java Learning Materials <small>1.0</small>
 
-> 一个神奇的文档网站生成器。
+> JAVA 技术学习与讨论
 
-- 简单、轻便 (压缩后 ~21kB)
-- 无需生成 html 文件
-- 众多主题
+- Java 基础: 数据结构、锁、线程池、并发编程、设计模式
+- 框架: Spring、Springboot
+- 中间件: Redis、RabbitMQ
+- 分布式、微服务： AlibabaCloud
 
 [Github](https://github.com/dep-darkLonely/Interview)
 [Get Started](#Interview)

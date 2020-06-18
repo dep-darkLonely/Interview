@@ -1,61 +1,25 @@
- Spring ����
+# Spring 
 
-1. Spring Boot �� Spring ������
+Spring Boot 和 Spring 的区别：
 
-	1. Spring ��һ����ԴӦ�ó����ܣ��򻯿������ֲ�ܹ����������
-	2. Spring Boot ����Spring �Ļ����ϴ��һ����ܣ�����Spring��ܵ�һ����չ�����˴�ͳSpring��Ŀ������XML����ù���
-	3. ����Tomcat��Jetty�ȷ���������ͨ��java -jar����ʽֱ������
-	4. �ṩ��һЩstarters ��POM������
+Spring 是一个开源应用程序框架，简化开发，分层架构、方便解耦
+Spring Boot 是在Spring 的基础上搭建的一个框架，就是Spring框架的一个扩展，简化了传统Spring项目繁琐的XML搭建配置过程
+内置Tomcat、Jetty等服务器，可通过java -jar的形式直接启动
+提供了一些starters 简化POM的配置
+Spring AOP(面向切面编程) 实现原理
 
-2. Spring AOP(����������) ʵ��ԭ��
+AOP 面向切面编程： AOP是OOP的一个补充，一种“横切”技术，用于将那些与核心业务流程无关的通用功能抽离出来、单独封装，行 成一个独立的切面。
+AOP的实现一般都是 [代理模式]，一般分为 [动态代理] 和 [静态代理]； 2.1 动态代理：动态代理是在JVM中动态生成的，运行时增强 JDK 动态代理： 代理接口，目标对象的实现类必须实现接口 CGLIB 动态代理： 代理类，目标对象的实现类没有实现接口 2.2 静态代理：静态代理是在编译期间生成AOP代理类，编译时增强 ASpectJ 静态代理：支持 编译时、编译后、加载时织入（Weaving），会使用ajc编译器 织入： 表示的是通过特殊的编译器ajc来嵌入切面到java类中
+Spring AOP 的5种通知类型： 3.1 前置通知： 在方法(切点)执行之前返回 3.2 环绕通知： 在方法(切点)执行前后执行 3.3 后置通知： 在方法(切点)执行之后返回 3.4 异常通知： 在方法(切点)抛出异常之后执行 3.5 返回通知： 在方法(切点)返回结果之后通知
+Spring IOC/DI 控制反转或依赖注入
 
-	1. AOP ���������̣� AOP��OOP��һ�����䣬һ�֡����С����������ڽ���Щ�����ҵ�������޹ص�ͨ�ù��ܳ��������������װ����
-	   ��һ�����������档
-	2. AOP��ʵ��һ�㶼�� [����ģʽ]��һ���Ϊ [��̬����] �� [��̬����]��
-		2.1 ��̬��������̬��������JVM�ж�̬���ɵģ�����ʱ��ǿ
-			JDK ��̬������ �����ӿڣ�Ŀ������ʵ�������ʵ�ֽӿ�
-			CGLIB ��̬������ �����࣬Ŀ������ʵ����û��ʵ�ֽӿ�
-		2.2 ��̬��������̬�������ڱ����ڼ�����AOP�����࣬����ʱ��ǿ
-			ASpectJ ��̬������֧�� ����ʱ������󡢼���ʱ֯�루Weaving������ʹ��ajc������
-			֯�룺 ��ʾ����ͨ������ı�����ajc��Ƕ�����浽java����
-	3. Spring AOP ��5��֪ͨ���ͣ�
-		3.1 ǰ��֪ͨ�� �ڷ���(�е�)ִ��֮ǰ����
-		3.2 ����֪ͨ�� �ڷ���(�е�)ִ��ǰ��ִ��
-		3.3 ����֪ͨ�� �ڷ���(�е�)ִ��֮�󷵻�
-		3.4 �쳣֪ͨ�� �ڷ���(�е�)�׳��쳣֮��ִ��
-		3.5 ����֪ͨ�� �ڷ���(�е�)���ؽ��֮��֪ͨ
-		
-3. Spring IOC/DI ���Ʒ�ת������ע��
+利用JAVA 反射机制实现
+将JAVA 对象交给Spring 容器进行管理
+Spring IOC 初始化过程： XML -- 读取 --> Resource -- 解析 --> BeanDefinition -- 注册Bean --> BeanFactory(生产和管理Bean) 3.1 读取XML中Bean 的配置信息 3.2 根据Bean
+Spring Bean 的作用域
 
-	1. ����JAVA �������ʵ��
-	2. ��JAVA ���󽻸�Spring �������й���
-	3. Spring IOC ��ʼ�����̣�
-		XML -- ��ȡ --> Resource -- ���� --> BeanDefinition -- ע��Bean --> BeanFactory(�����͹���Bean)
-		3.1 ��ȡXML��Bean ��������Ϣ
-		3.2 ����Bean
+4.1 Singleton： 单例，Spring IOC容器中仅存在一个Bean实例，Bean以单例方式存在，默认值 4.2 Prototype： 原型, 每次获取Bean都会返回一个新的实例， 相当于执行new Bean() 4.3 Request： 每次HTTP请求都会创建一个Bean实例 4.4 Session： 同一个HTTP Session中，共享一个Bean 4.5 GlobalSession：一般用于Portal应用环境，Portal请求由Portal容器管理
 
-4. Spring Bean ��������
+Spring Transcation 事务: 5.1 事务的四大特性： 原子性，持久性，隔离性，一致性（ACID） 原子性： 原子是最小单位，指的是事务中包含的操作是不可分割的，要么全部成功要么全部失败 持久性： 指的是事务一旦被提交了，对数据库中的数据的改变是永久性的 隔离性： 当多个用户并发访问数据库时，数据库为每一个用户开启的事务是相互隔离的，互相不干扰的 一致性： 指的是事务必须使数据库从一个一致性状态转变到另一个一致性状态，也就是说
 
-	4.1 Singleton�� ������Spring IOC�����н�����һ��Beanʵ����Bean�Ե�����ʽ���ڣ�Ĭ��ֵ
-	4.2 Prototype�� ԭ��, ÿ�λ�ȡBean���᷵��һ���µ�ʵ���� �൱��ִ��new Bean()
-	4.3 Request�� ÿ��HTTP���󶼻ᴴ��һ��Beanʵ��
-	4.4 Session�� ͬһ��HTTP Session�У�����һ��Bean
-	4.5 GlobalSession��һ������PortalӦ�û�����Portal������Portal��������
-
-5. Spring Transcation ����:
-	5.1 ������Ĵ����ԣ� ԭ���ԣ��־��ԣ������ԣ�һ���ԣ�ACID��
-		ԭ���ԣ� ԭ������С��λ��ָ���������а����Ĳ����ǲ��ɷָ�ģ�Ҫôȫ���ɹ�Ҫôȫ��ʧ��
-		�־��ԣ� ָ��������һ�����ύ�ˣ������ݿ��е����ݵĸı��������Ե�
-		�����ԣ� ������û������������ݿ�ʱ�����ݿ�Ϊÿһ���û��������������໥����ģ����಻���ŵ�
-		һ���ԣ� ָ�����������ʹ���ݿ��һ��һ����״̬ת�䵽��һ��һ����״̬��Ҳ����˵
-
-	5.2 transcationDefinition.isolation_default, Ĭ��ʹ�ú�����ݿ��Ĭ�ϸ��뼶��
-			MYSQL Ĭ��ʹ�õ���REPEATABLE_READ���뼶��
-			Oracle Ĭ��ʹ�õ���READ_COMMITED���뼶��
-	  transcationDefinition.isolation_read_uncommited: ��͵ĸ��뼶��������ȡ��������δ�ύ�����ݱ�������ܻᵼ��������ö�
-				�����ظ���
-	  transcationDefinition.isolation_read_commited: ������ȡ�����������Ѿ��ύ�����ݣ�����ֹ��������ö��Ͳ����ض����п��ܷ���
-	  transcationDefinition.isolation_repetable_read: �ظ���ȡ����ͬһ�ֶεĶ�ζ�ȡ�������һ�µģ����������Ǳ������������޸�
-				����ֹ����������ظ�������������ֹ�ö� 
-	  transcationDefinition.serializable: ��ߵĸ��뼶����ȫ����ACID�ĸ��뼶�����е�����������˳��ִ�У���������
-				֮���ǲ����໥Ӱ��ġ����Է�ֹ������ö��������ظ����������ܽ����ܵ�����Ӱ�졣
+5.2 transcationDefinition.isolation_default, 默认使用后端数据库的默认隔离级别， MYSQL 默认使用的是REPEATABLE_READ隔离级别 Oracle 默认使用的是READ_COMMITED隔离级别 transcationDefinition.isolation_read_uncommited: 最低的隔离级别，允许读取事务中尚未提交的数据变更，可能会导致脏读、幻读 不可重复读 transcationDefinition.isolation_read_commited: 允许读取并发事务中已经提交的数据，可阻止脏读，但幻读和不可重读仍有可能发生 transcationDefinition.isolation_repetable_read: 重复读取，对同一字段的多次读取结果都是一致的，除非数据是被本身事务所修改 可阻止脏读、不可重复读，但不能阻止幻读 transcationDefinition.serializable: 最高的隔离级别，完全服从ACID的隔离级别，所有的事务都是依次顺序执行，这样事务 之间是不会相互影响的。可以防止脏读、幻读、不可重复读，但性能将会受到严重影响。

@@ -3,7 +3,7 @@
 
 * Java基础知识
     
-    - [数据结构](Java数据结构.md)
+    - [数据结构](JavaDataStructure.md)
 
     - [内存模型JMM](JMM.md)
 

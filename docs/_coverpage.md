@@ -3,7 +3,7 @@
 ![logo](./Image/logo.jpeg)
 
 
-# Java Learning Materials <small>1.0</small>
+# Java Learning Exchange <small>1.0</small>
 
 > JAVA 技术学习与讨论
 

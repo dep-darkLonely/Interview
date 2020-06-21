@@ -1,26 +1,26 @@
 # JAVA 数据结构
 
 - ArrayList 源码分析
-  
-    ```JAVA
-        public static void main(String[] args) {
-            // 实例化一个为空的Object对象数组
-            List<String> list = new ArrayList<>();
 
-            /* 1.  ArrayList 底层实现采用的是Object[]数组
-            * 2.  ArrayList 添加元素到Object[]数组时，若数组长度为0，则初始化Object[]数组容量为10
-            * 3.  ArrayList 扩容实现步骤：
-            * 		-> 1. 扩容： 数组的默认大小为10，将数组的容量每次扩充为原来数组内容的1.5倍
-            * 		-> 2. 复制:  把原数组的内容复制到新数组中
-            */
-            list.add("1");
-            ...
-            list.add("11");
-        }
+    ```java
+    public static void main(String[] args) {
+        // 实例化一个为空的Object对象数组
+        List<String> list = new ArrayList<>();
+
+        /* 1.  ArrayList 底层实现采用的是Object[]数组
+        * 2.  ArrayList 添加元素到Object[]数组时，若数组长度为0，则初始化Object[]数组容量为10
+        * 3.  ArrayList 扩容实现步骤：
+        * 		-> 1. 扩容： 数组的默认大小为10，将数组的容量每次扩充为原来数组内容的1.5倍
+        * 		-> 2. 复制:  把原数组的内容复制到新数组中
+        */
+        list.add("1");
+        ...
+        list.add("11");
+    }
     ```
 
     源码分析①:
-    ```JAVA
+    ```java
     java.util.ArrayList#ArrayList()
 
     无参构造器:
@@ -52,7 +52,7 @@
 
     ```
     ② ArrayList增加元素:
-    ```JAVA
+    ```java
     /**
      * Appends the specified element to the end of this list.
      *
@@ -119,7 +119,7 @@
     ```
 
     删除元素方法:
-    ```JAVA
+    ```java
     java.util.ArrayList#remove(java.lang.Object)
 
     public E remove(int index) {
@@ -141,7 +141,7 @@
     ```
     List元素排序Sort:
 
-    ```JAVA
+    ```java
     java.util.List#sort
 
     public static void main(String[] args) {
@@ -199,7 +199,7 @@
 
 - Set
   
-  ```JAVA
+  ```java
     /**
      * HashSet 底层采用HashMap实现；
      * 默认初始化HashMap容量为16，加载因子0.75
@@ -212,7 +212,7 @@
     }
   ```
   源码分析① : 
-  ```JAVA
+  ```java
 
     // Set中存储的值实际为HashMap中Key值
     private transient HashMap<E,Object> map;
@@ -266,7 +266,7 @@
     }
   ```
   存储元素② :
-  ```JAVA
+  ```java
     /**
      * 当元素不存在时，添加元素到HashMap中。
      * map.put(e, PRESENT) 返回值为旧值

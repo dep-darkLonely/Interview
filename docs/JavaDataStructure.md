@@ -1,25 +1,26 @@
 # JAVA 数据结构
 
-- ArrayList 源码分析
+- **ArrayList**
+
+    > [!NOTE|label:ArrayList底层实现及其扩容]
+    > 1. ArrayList 底层实现采用的是Object[]数组
+    > 2. ArrayList 添加元素到Object[]数组时，若数组长度为0，则初始化Object[]数组容量为10
+    > 3. ArrayList 扩容实现步骤：
+       - 扩容： 数组的默认大小为10，将数组的容量每次扩充为原来数组内容的1.5倍
+       - 复制:  把原数组的内容复制到新数组中
 
     ```java
     public static void main(String[] args) {
         // 实例化一个为空的Object对象数组
         List<String> list = new ArrayList<>();
 
-        /* 1.  ArrayList 底层实现采用的是Object[]数组
-        * 2.  ArrayList 添加元素到Object[]数组时，若数组长度为0，则初始化Object[]数组容量为10
-        * 3.  ArrayList 扩容实现步骤：
-        * 		-> 1. 扩容： 数组的默认大小为10，将数组的容量每次扩充为原来数组内容的1.5倍
-        * 		-> 2. 复制:  把原数组的内容复制到新数组中
-        */
         list.add("1");
         ...
         list.add("11");
     }
     ```
 
-    源码分析①:
+    > [!WARNING|label:源码分析①|icon:null]
     ```java
     java.util.ArrayList#ArrayList()
 
@@ -51,7 +52,7 @@
     }
 
     ```
-    ② ArrayList增加元素:
+    > [!WARNING|label:ArrayList增加元素②|icon:null]
     ```java
     /**
      * Appends the specified element to the end of this list.
@@ -118,7 +119,7 @@
     }
     ```
 
-    删除元素方法:
+    > [!WARNING|label:删除元素方法:|icon:null]
     ```java
     java.util.ArrayList#remove(java.lang.Object)
 
@@ -139,7 +140,10 @@
         return oldValue;
     }
     ```
-    List元素排序Sort:
+    
+    > [!NOTE|label:List元素排序Sort源码分析:]
+    > + List 排序实际使用的是Arrays.sort()方法排序
+    > + List 列表排序使用Comparator实现排序
 
     ```java
     java.util.List#sort
@@ -197,7 +201,7 @@
     }
     ```
 
-- Set
+- **Set**
   
   ```java
     /**
@@ -211,7 +215,7 @@
         System.out.println(set.size());
     }
   ```
-  源码分析① : 
+  > [!WARNING|label:源码分析①|icon:null]
   ```java
 
     // Set中存储的值实际为HashMap中Key值
@@ -265,7 +269,7 @@
         addAll(c);
     }
   ```
-  存储元素② :
+  > [!WARNING|label:存储元素②|icon:null]
   ```java
     /**
      * 当元素不存在时，添加元素到HashMap中。
@@ -276,4 +280,111 @@
     }
   ```
 - HashMap
+  
+    > [!NOTE|label:HashMap底层实现原理]
+    > HashMap底层实现原理:
+
+    ```java
+    public static void main(String[] args) {
+
+        Map<String, String> map = new HashMap<>();
+        map.put("key", "value");
+        map.put("key1", "value1");
+
+        map.get("key");
+    }
+    ```
+    > [!WARNING|label:源码分析①|icon:null]
+    > **※** tableSizeFor(initialCapacity)
+    > - 计算**大于并且最接近 自定义HashMap容量的2的整数次幂的数**,该值将在第一次初始化HashMap容量时使用;
+    > 如 自定义HashMap容量为10，则返回16
+
+    ```java
+    java.util.HashMap#HashMap(int, float)
+
+    /**
+     * Constructs an empty <tt>HashMap</tt> with the specified initial
+     * capacity and load factor.
+     *
+     * @param  initialCapacity 初始化容量
+     * @param  loadFactor      加载因子
+     * @throws IllegalArgumentException if the initial capacity is negative
+     *         or the load factor is nonpositive
+     */
+    public HashMap(int initialCapacity, float loadFactor) {
+        if (initialCapacity < 0)
+            throw new IllegalArgumentException("Illegal initial capacity: " +
+                                               initialCapacity);
+
+        // 最大容量为 1<<30
+        if (initialCapacity > MAXIMUM_CAPACITY)
+            initialCapacity = MAXIMUM_CAPACITY;
+        
+        if (loadFactor <= 0 || Float.isNaN(loadFactor))
+            throw new IllegalArgumentException("Illegal load factor: " +
+                                               loadFactor);
+        this.loadFactor = loadFactor;
+
+        /**
+         * 计算大于并且最接近 自定义HashMap容量的2的整数次幂的数,该值
+         * 将在第一次初始化HashMap容量时使用
+         * 如 自定义HashMap容量为10，则返回16
+         */
+        this.threshold = tableSizeFor(initialCapacity);
+    }
+
+    /**
+     * Constructs an empty <tt>HashMap</tt> with the specified initial
+     * capacity and the default load factor (0.75).
+     *
+     * @param  initialCapacity the initial capacity.
+     * @throws IllegalArgumentException if the initial capacity is negative.
+     */
+    public HashMap(int initialCapacity) {
+        this(initialCapacity, DEFAULT_LOAD_FACTOR);
+    }
+
+    /**
+     * Constructs an empty <tt>HashMap</tt> with the default initial capacity
+     * (16) and the default load factor (0.75).
+     */
+    public HashMap() {
+
+        // 初始化默认加载因子0.75f
+        this.loadFactor = DEFAULT_LOAD_FACTOR; // all other fields defaulted
+    }
+    ```
+
+    > [!NOTE|label:put方法实现]
+
+    ```java
+    /**
+     * Associates the specified value with the specified key in this map.
+     * If the map previously contained a mapping for the key, the old
+     * value is replaced.
+     *
+     * @param key key with which the specified value is to be associated
+     * @param value value to be associated with the specified key
+     * @return key 存在，则返回key对应的旧值，否则，返回NULL
+     */
+    // put 方法是有返回值的
+    public V put(K key, V value) {
+        return putVal(hash(key), key, value, false, true);
+    }
+    ```
+
+    > [!NOTE|label:put方法实现]
+    > - key.hashCode() 默认返回值为int类型,int类型4byte，32位
+    > - h >>> 16 保留高位，将高位的变化影响到低位的变化
+    > - (h = key.hashCode()) ^ (h >>> 16) 主要是为了是减少hash冲突，使其更加的散列
+    > - HashMap中默认支持key为null的值，并且插入到HashMap的索引为0的位置
+    
+    ```java 
+    static final int hash(Object key) {
+        int h;
+        // key 为 NULL时，默认hashcode 为0
+        return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+    }
+    ```
+
 - ConcurrentHashMap

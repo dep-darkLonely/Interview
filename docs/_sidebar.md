@@ -4,6 +4,7 @@
 * Java基础知识
     
     - [数据结构](JavaDataStructure.md)
+    - [LinkedList](LinkedList.md)
 
     - [内存模型JMM](JMM.md)
 

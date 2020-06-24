@@ -1,10 +1,20 @@
 
-![logo](./Image/logo.jpeg ':size=100')
+![logo](../Image/logo.jpeg ':size=100')
 
 * Java基础知识
-    
-    - [数据结构](JavaDataStructure.md)
-    - [LinkedList](LinkedList.md)
+
+    - [基础问题](BasicProblem.md)
+
+    * 数据结构
+        - [ArrayList](DataStructure/ArrayList.md)
+
+        - [LinkedList](DataStructure/LinkedList.md)
+
+        - [Set](DataStructure/Set.md)
+
+        - [HashMap](DataStructure/HashMap.md)
+
+        - [ConcurrentHashMap](DataStructure/ConcurrentHashMap.md)
 
     - [内存模型JMM](JMM.md)
 

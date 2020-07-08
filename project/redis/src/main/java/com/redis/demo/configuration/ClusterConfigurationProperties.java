@@ -3,6 +3,7 @@ package com.redis.demo.configuration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.Hashtable;
 import java.util.List;
 
 /**
@@ -27,4 +28,5 @@ public class ClusterConfigurationProperties {
     public void setNodes(List<String> nodes) {
         this.nodes = nodes;
     }
+
 }

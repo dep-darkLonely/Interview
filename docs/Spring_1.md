@@ -1,4 +1,8 @@
-# Spring 源码学习
+# Spring 源码学习<1>
+
+#### Spring整体脉络图
+![Spring_Overview](./Image/Spring/IOCOverView.jpg)
+
 
 > [!Note|label:创建Test程序]
 ```java
@@ -11,7 +15,6 @@ public void testIOC() {
     System.out.println(user);
 }
 ```
-#### Spring整体脉络图
 
 #### 源码解析
 
@@ -305,6 +308,11 @@ public void preInstantiateSingletons() throws BeansException {
     }
 }
 ```
+
+#### doGetBean方法详细调用流程图
+
+![doGetBean调用流程图](./Image/Spring/doGetBean.jpg)
+
 
 > [!Warning|label:getBean调用流程]
 > - getBean() 方法主要逻辑流程:
@@ -1655,7 +1663,47 @@ private String[] doGetBeanNamesForType(ResolvableType type, boolean includeNonSi
 >
 > - initializeBean() 用于初始化Bean实例
 > - 该方法大概逻辑处理：
->   - <1>
+>   - <1> invokeAwareMethods 调用实现Aware接口的方法，Aware接口是具有标识作用的超级接口，实现了该接口的Bean是具有被Spring容器通知的能力；而被通知的方式就通过回调函数；  
+  如实现ApplicatioContextAware接口的bean，即不需要注入也可以在Bean中直接获取ApplicationContext对象
 >   - <2> applyBeanPostProcessorsBeforeInitialization 调用初始化之前的postProcessBeforeInitialization后置处理器，在Bean初始化之前对其进行操作
 >   - <3> invokeInitMethods 调用初始化方法，进行Bean的初始化操作
 >   - <4> applyBeanPostProcessorsAfterInitialization 调用初始化之后的postProcessAfterInitialization后置处理器,生成代理对象（Spring AOP 动态代理）
+
+```java
+protected Object initializeBean(final String beanName, final Object bean, @Nullable RootBeanDefinition mbd) {
+    if (System.getSecurityManager() != null) {
+        AccessController.doPrivileged((PrivilegedAction<Object>) () -> {
+            // 通过回调函数的形式调用给实现Aware接口的Bean设置属性
+            invokeAwareMethods(beanName, bean);
+            return null;
+        }, getAccessControlContext());
+    }
+    else {
+        // 通过回调函数的形式调用给实现Aware接口的Bean设置属性
+        invokeAwareMethods(beanName, bean);
+    }
+
+    Object wrappedBean = bean;
+
+    if (mbd == null || !mbd.isSynthetic()) {
+        // 调用postProcessBeforeInitialization后置处理器，在Bean初始化之前进行操作
+        wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
+    }
+
+    try {
+        // 调用init()方法对Bean进行初始化工作
+        invokeInitMethods(beanName, wrappedBean, mbd);
+    }
+    catch (Throwable ex) {
+        throw new BeanCreationException(
+                (mbd != null ? mbd.getResourceDescription() : null),
+                beanName, "Invocation of init method failed", ex);
+    }
+    if (mbd == null || !mbd.isSynthetic()) {
+        // 调用postProcessAfterInitialization后置处理器，在Bean初始化完成之后，对其进行操作
+        wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
+    }
+
+    return wrappedBean;
+}
+```

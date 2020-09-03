@@ -5,6 +5,7 @@
 
 
 > [!Note|label:创建Test程序]
+
 ```java
 // 只介绍使用注解版配置文件
 @Test
@@ -22,7 +23,9 @@ public void testIOC() {
 > ![Annotation...类图](./Image/Spring/AnnotationConfigApplicationContext.png)
 
 
+
 > [!Note|label:AnnotationConfigApplicationContext源码解析]
+
 ```java
 /**
  * 创建一个AnnotationConfigApplicationContext上下文对*象，从给定的配置类中读取Bean的定义信息，并刷新上下文
@@ -61,7 +64,8 @@ public AnnotationConfigApplicationContext() {
 ====================================================
 ```
 
-> [!Note|label:Refresh方法是Spring的核心方法]   
+> [!Note|label:Refresh方法是Spring的核心方法]
+>
 > - **AbstractApplicationContext中的refresh()方法是Spring框架的核心;**
 > - Refresh()方法总共可以分为12步骤，核心步骤finishBeanFactoryInitialization()
 
@@ -76,7 +80,7 @@ public void refresh() throws BeansException, IllegalStateException {
          * 设置开始时间，创建Environment环境变量，以及实例化一些用于存储监听器的集合
          */
         prepareRefresh();
-        
+
         /**
          * <2> 获取BeanFactory,设置BeanFactory的ID属性
          * 涉及CAS操作，判断当前BeanFactory是否已经刷新过
@@ -175,7 +179,8 @@ public void refresh() throws BeansException, IllegalStateException {
 }
 ```
 
-> [!Warning|label:重点介绍finishBeanFactoryInitialization方法]  
+> [!Warning|label:重点介绍finishBeanFactoryInitialization方法]
+>
 > - 这里着重分析finishBeanFactoryInitialization()，该方法中实现了Spring的核心功能AOP(面向切换编程)和IOC(控制反转)以及DI(依赖注入)
 
 ```java
@@ -190,7 +195,7 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
      * 实例化上下文的conversion service
      * 实例化转换服务，如字段类型转换，对象转换
      * 依赖注入时，可用于类型转换
-     */ 
+     */
     if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
             beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
         beanFactory.setConversionService(
@@ -200,7 +205,7 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
     /**
      * 判断beanFactory中是否存在一个嵌入值解析器,不存在的话，则添加一个嵌入值解析器，主要用于解析属性表达式中的占位符
      * 如：@value(#{})
-     */ 
+     */
     if (!beanFactory.hasEmbeddedValueResolver()) {
         // 添加一个嵌入值解析器
         beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
@@ -219,19 +224,20 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
      * 主要就是将bean 定义的名称进行缓存
      * 底层:
      * this.frozenBeanDefinitionNames = StringUtils.toStringArray(this.beanDefinitionNames);
-     */ 
+     */
     beanFactory.freezeConfiguration();
 
     /**
      * <p>
      *  <b>实例化剩余的单实例Bean</b>
      * </p>
-     */ 
+     */
     beanFactory.preInstantiateSingletons();
 }
 ```
 
 > [!Warning|label:preInstantiateSingletons方法调用详细流程]
+
 ```java
 @Override
 public void preInstantiateSingletons() throws BeansException {
@@ -279,7 +285,7 @@ public void preInstantiateSingletons() throws BeansException {
                  * <p>
                  *   <b>非工厂bean，普通bean</b>
                  * </p>
-                 */ 
+                 */
                 getBean(beanName);
             }
         }
@@ -312,7 +318,6 @@ public void preInstantiateSingletons() throws BeansException {
 #### doGetBean方法详细调用流程图
 
 ![doGetBean调用流程图](./Image/Spring/doGetBean.jpg)
-
 
 > [!Warning|label:getBean调用流程]
 > - getBean() 方法主要逻辑流程:
@@ -371,7 +376,7 @@ protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredTy
         /**
          * 判断是否存在父的beanFactory
          * 这里涉及到spring mvc中的父子容器
-         */ 
+         */
         BeanFactory parentBeanFactory = getParentBeanFactory();
         if (parentBeanFactory != null && !containsBeanDefinition(beanName)) {
             // Not found -> check parent.
@@ -762,9 +767,10 @@ protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd
 
 > [!Note|label:instantiateBean方法底层实现]     
 > instantiateBean()底层实现原理：通过反射获取构造器，在通过
-construct.newInstance()实现     
+construct.newInstance()实现
+>
 > 即： Class clazz = Class.forName();   
->     Constructor cons = clazz.getDeclaredConstructor();   
+>     Constructor cons = clazz.getDeclaredConstructor();  
 >     Object obj = cons.newInstance();
 
 ```java
@@ -847,41 +853,42 @@ public static <T> T instantiateClass(Constructor<T> ctor, Object... args) throws
 }
 ```
 
-> [!Warning|label:doCreateBean核心方法二populateBean]   
+> [!Warning|label:doCreateBean核心方法二populateBean]
+>
 > populateBean()方法主要用于给Bean实例对象填充属性，DI依赖注入就是在该方法中实现
 
 ```java
 /**
  * 使用属性值填充Bean实例
- */ 
+ */
 @SuppressWarnings("deprecation")  // for postProcessPropertyValues
 protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable BeanWrapper bw) {
-	if (bw == null) {
-		if (mbd.hasPropertyValues()) {
-			throw new BeanCreationException(
-					mbd.getResourceDescription(), beanName, "Cannot apply property values to null instance");
-		}
-		else {
-			// Skip property population phase for null instance.
-			return;
-		}
-	}
+    if (bw == null) {
+        if (mbd.hasPropertyValues()) {
+            throw new BeanCreationException(
+                    mbd.getResourceDescription(), beanName, "Cannot apply property values to null instance");
+        }
+        else {
+            // Skip property population phase for null instance.
+            return;
+        }
+    }
 
-	// Give any InstantiationAwareBeanPostProcessors the opportunity to modify the
-	// state of the bean before properties are set. This can be used, for example,
-	// to support styles of field injection.
-	if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
-		for (BeanPostProcessor bp : getBeanPostProcessors()) {
-			if (bp instanceof InstantiationAwareBeanPostProcessor) {
-				InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
-				if (!ibp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
-					return;
-				}
-			}
-		}
-	}
+    // Give any InstantiationAwareBeanPostProcessors the opportunity to modify the
+    // state of the bean before properties are set. This can be used, for example,
+    // to support styles of field injection.
+    if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+        for (BeanPostProcessor bp : getBeanPostProcessors()) {
+            if (bp instanceof InstantiationAwareBeanPostProcessor) {
+                InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
+                if (!ibp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
+                    return;
+                }
+            }
+        }
+    }
 
-	PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
+    PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
 
 
     /**
@@ -892,30 +899,30 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
      * <3> AUTOWIRE_BY_TYPE ： 根据type 自动装配
      * <4> AUTOWIRE_CONSTRUCTOR ： 根据构造函数自动装配
      */
-	int resolvedAutowireMode = mbd.getResolvedAutowireMode();
-	if (resolvedAutowireMode == AUTOWIRE_BY_NAME || resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
-		MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
-		// 根据name自动装配
-		if (resolvedAutowireMode == AUTOWIRE_BY_NAME) {
-			autowireByName(beanName, mbd, bw, newPvs);
-		}
+    int resolvedAutowireMode = mbd.getResolvedAutowireMode();
+    if (resolvedAutowireMode == AUTOWIRE_BY_NAME || resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
+        MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
+        // 根据name自动装配
+        if (resolvedAutowireMode == AUTOWIRE_BY_NAME) {
+            autowireByName(beanName, mbd, bw, newPvs);
+        }
         // 根据type自动装配
-		if (resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
-			autowireByType(beanName, mbd, bw, newPvs);
-		}
-		pvs = newPvs;
-	}
+        if (resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
+            autowireByType(beanName, mbd, bw, newPvs);
+        }
+        pvs = newPvs;
+    }
 
     // 判断BeanPostProcessor的后置处理器是否实现了InstantiationAwareBeanPostProcessor接口
-	boolean hasInstAwareBpps = hasInstantiationAwareBeanPostProcessors();
+    boolean hasInstAwareBpps = hasInstantiationAwareBeanPostProcessors();
 
-	boolean needsDepCheck = (mbd.getDependencyCheck() != AbstractBeanDefinition.DEPENDENCY_CHECK_NONE);
+    boolean needsDepCheck = (mbd.getDependencyCheck() != AbstractBeanDefinition.DEPENDENCY_CHECK_NONE);
 
-	PropertyDescriptor[] filteredPds = null;
-	if (hasInstAwareBpps) {
-		if (pvs == null) {
-			pvs = mbd.getPropertyValues();
-		}
+    PropertyDescriptor[] filteredPds = null;
+    if (hasInstAwareBpps) {
+        if (pvs == null) {
+            pvs = mbd.getPropertyValues();
+        }
 
         /**
          * 通过调用BeanPostProcessors后置处理器实现DI操作；
@@ -926,37 +933,37 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
          * <4> AutowiredAnnotationBeanPostProcessor
          * 实际起作用的分别是3 和 4.
          */
-		for (BeanPostProcessor bp : getBeanPostProcessors()) {
-			if (bp instanceof InstantiationAwareBeanPostProcessor) {
-				InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
-                
+        for (BeanPostProcessor bp : getBeanPostProcessors()) {
+            if (bp instanceof InstantiationAwareBeanPostProcessor) {
+                InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
+
                 // 获取属性值
-				PropertyValues pvsToUse = ibp.postProcessProperties(pvs, bw.getWrappedInstance(), beanName);
+                PropertyValues pvsToUse = ibp.postProcessProperties(pvs, bw.getWrappedInstance(), beanName);
 
-				if (pvsToUse == null) {
-					if (filteredPds == null) {
-						filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
-					}
-					pvsToUse = ibp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
-					if (pvsToUse == null) {
-						return;
-					}
-				}
-				pvs = pvsToUse;
-			}
-		}
-	}
-	if (needsDepCheck) {
-		if (filteredPds == null) {
-			filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
-		}
-		checkDependencies(beanName, mbd, filteredPds, pvs);
-	}
+                if (pvsToUse == null) {
+                    if (filteredPds == null) {
+                        filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
+                    }
+                    pvsToUse = ibp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
+                    if (pvsToUse == null) {
+                        return;
+                    }
+                }
+                pvs = pvsToUse;
+            }
+        }
+    }
+    if (needsDepCheck) {
+        if (filteredPds == null) {
+            filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
+        }
+        checkDependencies(beanName, mbd, filteredPds, pvs);
+    }
 
-	if (pvs != null) {
+    if (pvs != null) {
         // 填充属性值
-		applyPropertyValues(beanName, mbd, bw, pvs);
-	}
+        applyPropertyValues(beanName, mbd, bw, pvs);
+    }
 }
 ```
 
@@ -984,93 +991,93 @@ public PropertyValues postProcessProperties(PropertyValues pvs, Object bean, Str
 =============== findResourceMetadata 底层实现================
 
 private InjectionMetadata buildResourceMetadata(final Class<?> clazz) {
-	if (!AnnotationUtils.isCandidateClass(clazz, resourceAnnotationTypes)) {
-		return InjectionMetadata.EMPTY;
-	}
+    if (!AnnotationUtils.isCandidateClass(clazz, resourceAnnotationTypes)) {
+        return InjectionMetadata.EMPTY;
+    }
 
-	List<InjectionMetadata.InjectedElement> elements = new ArrayList<>();
-	Class<?> targetClass = clazz;
+    List<InjectionMetadata.InjectedElement> elements = new ArrayList<>();
+    Class<?> targetClass = clazz;
 
-	do {
-		final List<InjectionMetadata.InjectedElement> currElements = new ArrayList<>();
+    do {
+        final List<InjectionMetadata.InjectedElement> currElements = new ArrayList<>();
 
         // 通过反射，对当前Bean实例属性值处理
-		ReflectionUtils.doWithLocalFields(targetClass, field -> {
-			// field 字段上是否存在@webService注解
-			if (webServiceRefClass != null && field.isAnnotationPresent(webServiceRefClass)) {
-				if (Modifier.isStatic(field.getModifiers())) {
-					throw new IllegalStateException("@WebServiceRef annotation is not supported on static fields");
-				}
-				currElements.add(new WebServiceRefElement(field, field, null));
-			}
-			// fieid 字段上是否存在@ejb注解
-			else if (ejbRefClass != null && field.isAnnotationPresent(ejbRefClass)) {
-				if (Modifier.isStatic(field.getModifiers())) {
-					throw new IllegalStateException("@EJB annotation is not supported on static fields");
-				}
-				currElements.add(new EjbRefElement(field, field, null));
-			}
-			// fieid 字段上是否存在@Resource注解
-			else if (field.isAnnotationPresent(Resource.class)) {
-				if (Modifier.isStatic(field.getModifiers())) {
-					throw new IllegalStateException("@Resource annotation is not supported on static fields");
-				}
-				if (!this.ignoredResourceTypes.contains(field.getType().getName())) {
-					currElements.add(new ResourceElement(field, field, null));
-				}
-			}
-		});
+        ReflectionUtils.doWithLocalFields(targetClass, field -> {
+            // field 字段上是否存在@webService注解
+            if (webServiceRefClass != null && field.isAnnotationPresent(webServiceRefClass)) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    throw new IllegalStateException("@WebServiceRef annotation is not supported on static fields");
+                }
+                currElements.add(new WebServiceRefElement(field, field, null));
+            }
+            // fieid 字段上是否存在@ejb注解
+            else if (ejbRefClass != null && field.isAnnotationPresent(ejbRefClass)) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    throw new IllegalStateException("@EJB annotation is not supported on static fields");
+                }
+                currElements.add(new EjbRefElement(field, field, null));
+            }
+            // fieid 字段上是否存在@Resource注解
+            else if (field.isAnnotationPresent(Resource.class)) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    throw new IllegalStateException("@Resource annotation is not supported on static fields");
+                }
+                if (!this.ignoredResourceTypes.contains(field.getType().getName())) {
+                    currElements.add(new ResourceElement(field, field, null));
+                }
+            }
+        });
 
         // 通过反射，对Bean实例方法的处理
-		ReflectionUtils.doWithLocalMethods(targetClass, method -> {
-			Method bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
-			if (!BridgeMethodResolver.isVisibilityBridgeMethodPair(method, bridgedMethod)) {
-				return;
-			}
-			if (method.equals(ClassUtils.getMostSpecificMethod(method, clazz))) {
-				if (webServiceRefClass != null && bridgedMethod.isAnnotationPresent(webServiceRefClass)) {
-					if (Modifier.isStatic(method.getModifiers())) {
-						throw new IllegalStateException("@WebServiceRef annotation is not supported on static methods");
-					}
-					if (method.getParameterCount() != 1) {
-						throw new IllegalStateException("@WebServiceRef annotation requires a single-arg method: " + method);
-					}
-					PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
-					currElements.add(new WebServiceRefElement(method, bridgedMethod, pd));
-				}
-				else if (ejbRefClass != null && bridgedMethod.isAnnotationPresent(ejbRefClass)) {
-					if (Modifier.isStatic(method.getModifiers())) {
-						throw new IllegalStateException("@EJB annotation is not supported on static methods");
-					}
-					if (method.getParameterCount() != 1) {
-						throw new IllegalStateException("@EJB annotation requires a single-arg method: " + method);
-					}
-					PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
-					currElements.add(new EjbRefElement(method, bridgedMethod, pd));
-				}
-				else if (bridgedMethod.isAnnotationPresent(Resource.class)) {
-					if (Modifier.isStatic(method.getModifiers())) {
-						throw new IllegalStateException("@Resource annotation is not supported on static methods");
-					}
-					Class<?>[] paramTypes = method.getParameterTypes();
-					if (paramTypes.length != 1) {
-						throw new IllegalStateException("@Resource annotation requires a single-arg method: " + method);
-					}
-					if (!this.ignoredResourceTypes.contains(paramTypes[0].getName())) {
-						PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
-						currElements.add(new ResourceElement(method, bridgedMethod, pd));
-					}
-				}
-			}
-		});
+        ReflectionUtils.doWithLocalMethods(targetClass, method -> {
+            Method bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
+            if (!BridgeMethodResolver.isVisibilityBridgeMethodPair(method, bridgedMethod)) {
+                return;
+            }
+            if (method.equals(ClassUtils.getMostSpecificMethod(method, clazz))) {
+                if (webServiceRefClass != null && bridgedMethod.isAnnotationPresent(webServiceRefClass)) {
+                    if (Modifier.isStatic(method.getModifiers())) {
+                        throw new IllegalStateException("@WebServiceRef annotation is not supported on static methods");
+                    }
+                    if (method.getParameterCount() != 1) {
+                        throw new IllegalStateException("@WebServiceRef annotation requires a single-arg method: " + method);
+                    }
+                    PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
+                    currElements.add(new WebServiceRefElement(method, bridgedMethod, pd));
+                }
+                else if (ejbRefClass != null && bridgedMethod.isAnnotationPresent(ejbRefClass)) {
+                    if (Modifier.isStatic(method.getModifiers())) {
+                        throw new IllegalStateException("@EJB annotation is not supported on static methods");
+                    }
+                    if (method.getParameterCount() != 1) {
+                        throw new IllegalStateException("@EJB annotation requires a single-arg method: " + method);
+                    }
+                    PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
+                    currElements.add(new EjbRefElement(method, bridgedMethod, pd));
+                }
+                else if (bridgedMethod.isAnnotationPresent(Resource.class)) {
+                    if (Modifier.isStatic(method.getModifiers())) {
+                        throw new IllegalStateException("@Resource annotation is not supported on static methods");
+                    }
+                    Class<?>[] paramTypes = method.getParameterTypes();
+                    if (paramTypes.length != 1) {
+                        throw new IllegalStateException("@Resource annotation requires a single-arg method: " + method);
+                    }
+                    if (!this.ignoredResourceTypes.contains(paramTypes[0].getName())) {
+                        PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
+                        currElements.add(new ResourceElement(method, bridgedMethod, pd));
+                    }
+                }
+            }
+        });
 
-		elements.addAll(0, currElements);
-		targetClass = targetClass.getSuperclass();
-	}
-	while (targetClass != null && targetClass != Object.class);
+        elements.addAll(0, currElements);
+        targetClass = targetClass.getSuperclass();
+    }
+    while (targetClass != null && targetClass != Object.class);
 
     // 返回需要注入的属性，以及属性类型
-	return InjectionMetadata.forElements(elements, clazz);
+    return InjectionMetadata.forElements(elements, clazz);
 }
 ```
 
@@ -1083,53 +1090,53 @@ private InjectionMetadata buildResourceMetadata(final Class<?> clazz) {
 public PropertyValues postProcessProperties(PropertyValues pvs, Object bean, String beanName) {
 
     // 获取AutoWired的metadata信息
-	InjectionMetadata metadata = findAutowiringMetadata(beanName, bean.getClass(), pvs);
-	try {
+    InjectionMetadata metadata = findAutowiringMetadata(beanName, bean.getClass(), pvs);
+    try {
 
         // 实现依赖注入DI操作
-		metadata.inject(bean, beanName, pvs);
-	}
-	catch (BeanCreationException ex) {
-		throw ex;
-	}
-	catch (Throwable ex) {
-		throw new BeanCreationException(beanName, "Injection of autowired dependencies failed", ex);
-	}
-	return pvs;
+        metadata.inject(bean, beanName, pvs);
+    }
+    catch (BeanCreationException ex) {
+        throw ex;
+    }
+    catch (Throwable ex) {
+        throw new BeanCreationException(beanName, "Injection of autowired dependencies failed", ex);
+    }
+    return pvs;
 }
 
 ============= findAutowiringMetadata 底层实现 ================
 org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor#buildAutowiringMetadata
 
 private InjectionMetadata buildAutowiringMetadata(final Class<?> clazz) {
-	if (!AnnotationUtils.isCandidateClass(clazz, this.autowiredAnnotationTypes)) {
-		return InjectionMetadata.EMPTY;
-	}
+    if (!AnnotationUtils.isCandidateClass(clazz, this.autowiredAnnotationTypes)) {
+        return InjectionMetadata.EMPTY;
+    }
 
-	List<InjectionMetadata.InjectedElement> elements = new ArrayList<>();
-	Class<?> targetClass = clazz;
+    List<InjectionMetadata.InjectedElement> elements = new ArrayList<>();
+    Class<?> targetClass = clazz;
 
-	do {
-		final List<InjectionMetadata.InjectedElement> currElements = new ArrayList<>();
+    do {
+        final List<InjectionMetadata.InjectedElement> currElements = new ArrayList<>();
 
         /**
          * 通过反射，获取当前类的所有属性，并且判断当前字段属性
          * 中是否使用了@Autowired注解，若使用了该注解，则将
          * 其加入到集合中.
          */
-		ReflectionUtils.doWithLocalFields(targetClass, field -> {
-			MergedAnnotation<?> ann = findAutowiredAnnotation(field);
-			if (ann != null) {
-				if (Modifier.isStatic(field.getModifiers())) {
-					if (logger.isInfoEnabled()) {
-						logger.info("Autowired annotation is not supported on static fields: " + field);
-					}
-					return;
-				}
-				boolean required = determineRequiredStatus(ann);
-				currElements.add(new AutowiredFieldElement(field, required));
-			}
-		});
+        ReflectionUtils.doWithLocalFields(targetClass, field -> {
+            MergedAnnotation<?> ann = findAutowiredAnnotation(field);
+            if (ann != null) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Autowired annotation is not supported on static fields: " + field);
+                    }
+                    return;
+                }
+                boolean required = determineRequiredStatus(ann);
+                currElements.add(new AutowiredFieldElement(field, required));
+            }
+        });
 
         /**
          * 通过反射，获取当前类的所有方法，并且判断该方法上
@@ -1139,49 +1146,49 @@ private InjectionMetadata buildAutowiringMetadata(final Class<?> clazz) {
          * 例:
          * <ul>
          * @Autowired
-	     * public void setUser(User user) {
-		 *   this.user = user;
-	     * }
+         * public void setUser(User user) {
+         *   this.user = user;
+         * }
          * </ul>
          */  
-		ReflectionUtils.doWithLocalMethods(targetClass, method -> {
+        ReflectionUtils.doWithLocalMethods(targetClass, method -> {
             // 获取桥接方法
-			Method bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
-			if (!BridgeMethodResolver.isVisibilityBridgeMethodPair(method, bridgedMethod)) {
-				return;
-			}
+            Method bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
+            if (!BridgeMethodResolver.isVisibilityBridgeMethodPair(method, bridgedMethod)) {
+                return;
+            }
 
             // 查找@Autowired注解，如果存在，在返回该注解
-			MergedAnnotation<?> ann = findAutowiredAnnotation(bridgedMethod);
-			if (ann != null && method.equals(ClassUtils.getMostSpecificMethod(method, clazz))) {
-				if (Modifier.isStatic(method.getModifiers())) {
-					if (logger.isInfoEnabled()) {
-						logger.info("Autowired annotation is not supported on static methods: " + method);
-					}
-					return;
-				}
-				if (method.getParameterCount() == 0) {
-					if (logger.isInfoEnabled()) {
-						logger.info("Autowired annotation should only be used on methods with parameters: " +
-								method);
-					}
-				}
+            MergedAnnotation<?> ann = findAutowiredAnnotation(bridgedMethod);
+            if (ann != null && method.equals(ClassUtils.getMostSpecificMethod(method, clazz))) {
+                if (Modifier.isStatic(method.getModifiers())) {
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Autowired annotation is not supported on static methods: " + method);
+                    }
+                    return;
+                }
+                if (method.getParameterCount() == 0) {
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Autowired annotation should only be used on methods with parameters: " +
+                                method);
+                    }
+                }
                 // 判断required=true
-				boolean required = determineRequiredStatus(ann);
-				PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
+                boolean required = determineRequiredStatus(ann);
+                PropertyDescriptor pd = BeanUtils.findPropertyForMethod(bridgedMethod, clazz);
 
                 // 将该方法加入到集合中
-				currElements.add(new AutowiredMethodElement(method, required, pd));
-			}
-		});
+                currElements.add(new AutowiredMethodElement(method, required, pd));
+            }
+        });
 
-		elements.addAll(0, currElements);
-		targetClass = targetClass.getSuperclass();
-	}
-	while (targetClass != null && targetClass != Object.class);
+        elements.addAll(0, currElements);
+        targetClass = targetClass.getSuperclass();
+    }
+    while (targetClass != null && targetClass != Object.class);
 
     // 返回需要注入的属性，以及属性类型
-	return InjectionMetadata.forElements(elements, clazz);
+    return InjectionMetadata.forElements(elements, clazz);
 }
 ```
 
@@ -1190,68 +1197,68 @@ private InjectionMetadata buildAutowiringMetadata(final Class<?> clazz) {
 
 ```java
 @Override
-	protected void inject(Object bean, @Nullable String beanName, @Nullable PropertyValues pvs) throws Throwable {
-		Field field = (Field) this.member;
-		Object value;
+    protected void inject(Object bean, @Nullable String beanName, @Nullable PropertyValues pvs) throws Throwable {
+        Field field = (Field) this.member;
+        Object value;
 
         // 注入属性，是否已经进行缓存
-		if (this.cached) {
-			value = resolvedCachedArgument(beanName, this.cachedFieldValue);
-		}
-		else {
+        if (this.cached) {
+            value = resolvedCachedArgument(beanName, this.cachedFieldValue);
+        }
+        else {
             // 属性依赖描述器
-			DependencyDescriptor desc = new DependencyDescriptor(field, this.required);
+            DependencyDescriptor desc = new DependencyDescriptor(field, this.required);
 
             // 设置依赖属性的具体类;即包含该属性的具体类
-			desc.setContainingClass(bean.getClass());
+            desc.setContainingClass(bean.getClass());
 
             // 需要注入的BeanName
-			Set<String> autowiredBeanNames = new LinkedHashSet<>(1);
-			Assert.state(beanFactory != null, "No BeanFactory available");
+            Set<String> autowiredBeanNames = new LinkedHashSet<>(1);
+            Assert.state(beanFactory != null, "No BeanFactory available");
 
             // 类型转换器
-			TypeConverter typeConverter = beanFactory.getTypeConverter();
-			try {
+            TypeConverter typeConverter = beanFactory.getTypeConverter();
+            try {
                 // [核心内容] 解析该属性的依赖，返回属性依赖值
                 // Spring 依赖注入DI的核心API
-				value = beanFactory.resolveDependency(desc, beanName, autowiredBeanNames, typeConverter);
-			}
-			catch (BeansException ex) {
-				throw new UnsatisfiedDependencyException(null, beanName, new InjectionPoint(field), ex);
-			}
-			synchronized (this) {
-				if (!this.cached) {
-					if (value != null || this.required) {
-						this.cachedFieldValue = desc;
+                value = beanFactory.resolveDependency(desc, beanName, autowiredBeanNames, typeConverter);
+            }
+            catch (BeansException ex) {
+                throw new UnsatisfiedDependencyException(null, beanName, new InjectionPoint(field), ex);
+            }
+            synchronized (this) {
+                if (!this.cached) {
+                    if (value != null || this.required) {
+                        this.cachedFieldValue = desc;
 
 
                         // 建立一种bean和Bean依赖之间的一种映射关系
-						registerDependentBeans(beanName, autowiredBeanNames);
+                        registerDependentBeans(beanName, autowiredBeanNames);
 
-						if (autowiredBeanNames.size() == 1) {
-							String autowiredBeanName = autowiredBeanNames.iterator().next();
-							if (beanFactory.containsBean(autowiredBeanName) &&
-									beanFactory.isTypeMatch(autowiredBeanName, field.getType())) {
+                        if (autowiredBeanNames.size() == 1) {
+                            String autowiredBeanName = autowiredBeanNames.iterator().next();
+                            if (beanFactory.containsBean(autowiredBeanName) &&
+                                    beanFactory.isTypeMatch(autowiredBeanName, field.getType())) {
 
                                 // 缓存属性值
-								this.cachedFieldValue = new ShortcutDependencyDescriptor(
-										desc, autowiredBeanName, field.getType());
-							}
-						}
-					}
-					else {
-						this.cachedFieldValue = null;
-					}
-					this.cached = true;
-				}
-			}
-		}
-		if (value != null) {
-			ReflectionUtils.makeAccessible(field);
+                                this.cachedFieldValue = new ShortcutDependencyDescriptor(
+                                        desc, autowiredBeanName, field.getType());
+                            }
+                        }
+                    }
+                    else {
+                        this.cachedFieldValue = null;
+                    }
+                    this.cached = true;
+                }
+            }
+        }
+        if (value != null) {
+            ReflectionUtils.makeAccessible(field);
             // 应用属性的依赖值
-			field.set(bean, value);
-		}
-	}
+            field.set(bean, value);
+        }
+    }
 }
 ```
 
@@ -1264,34 +1271,34 @@ private InjectionMetadata buildAutowiringMetadata(final Class<?> clazz) {
 @Override
 @Nullable
 public Object resolveDependency(DependencyDescriptor descriptor, @Nullable String requestingBeanName,
-		@Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
+        @Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
 
     // 初始化参数
-	descriptor.initParameterNameDiscovery(getParameterNameDiscoverer());
+    descriptor.initParameterNameDiscovery(getParameterNameDiscoverer());
 
     // 判断该属性的依赖值类型是否是Optional<T>
-	if (Optional.class == descriptor.getDependencyType()) {
-		return createOptionalDependency(descriptor, requestingBeanName);
-	}
+    if (Optional.class == descriptor.getDependencyType()) {
+        return createOptionalDependency(descriptor, requestingBeanName);
+    }
     // 判断该属性的依赖值是否实现了ObjectFactory接口
-	else if (ObjectFactory.class == descriptor.getDependencyType() ||
-			ObjectProvider.class == descriptor.getDependencyType()) {
-		return new DependencyObjectProvider(descriptor, requestingBeanName);
-	}
+    else if (ObjectFactory.class == descriptor.getDependencyType() ||
+            ObjectProvider.class == descriptor.getDependencyType()) {
+        return new DependencyObjectProvider(descriptor, requestingBeanName);
+    }
     // 判断该属性的依赖值是否采用了@Inject注解
-	else if (javaxInjectProviderClass == descriptor.getDependencyType()) {
-		return new Jsr330Factory().createDependencyProvider(descriptor, requestingBeanName);
-	}
-	else {
+    else if (javaxInjectProviderClass == descriptor.getDependencyType()) {
+        return new Jsr330Factory().createDependencyProvider(descriptor, requestingBeanName);
+    }
+    else {
         // @Lazy
-		Object result = getAutowireCandidateResolver().getLazyResolutionProxyIfNecessary(
-				descriptor, requestingBeanName);
-		if (result == null) {
+        Object result = getAutowireCandidateResolver().getLazyResolutionProxyIfNecessary(
+                descriptor, requestingBeanName);
+        if (result == null) {
             // 解析单例 && 非懒加载
-			result = doResolveDependency(descriptor, requestingBeanName, autowiredBeanNames, typeConverter);
-		}
-		return result;
-	}
+            result = doResolveDependency(descriptor, requestingBeanName, autowiredBeanNames, typeConverter);
+        }
+        return result;
+    }
 }
 ```
 
@@ -1302,119 +1309,119 @@ public Object resolveDependency(DependencyDescriptor descriptor, @Nullable Strin
 ```java
 @Nullable
 public Object doResolveDependency(DependencyDescriptor descriptor, @Nullable String beanName,
-		@Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
+        @Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
 
     // 依赖注入描述器
-	InjectionPoint previousInjectionPoint = ConstructorResolver.setCurrentInjectionPoint(descriptor);
-	try {
+    InjectionPoint previousInjectionPoint = ConstructorResolver.setCurrentInjectionPoint(descriptor);
+    try {
         // 判断是否可以通过快捷方式获取依赖
-		Object shortcut = descriptor.resolveShortcut(this);
-		if (shortcut != null) {
-			return shortcut;
-		}
+        Object shortcut = descriptor.resolveShortcut(this);
+        if (shortcut != null) {
+            return shortcut;
+        }
 
         // 获取依赖属性的类对象
-		Class<?> type = descriptor.getDependencyType();
+        Class<?> type = descriptor.getDependencyType();
 
         // 通过自动装配的解析器获取最合适的Bean
-		Object value = getAutowireCandidateResolver().getSuggestedValue(descriptor);
+        Object value = getAutowireCandidateResolver().getSuggestedValue(descriptor);
 
-		if (value != null) {
-			if (value instanceof String) {
+        if (value != null) {
+            if (value instanceof String) {
                 // Spring EL 表达式解析
-				String strVal = resolveEmbeddedValue((String) value);
-				BeanDefinition bd = (beanName != null && containsBean(beanName) ?
-						getMergedBeanDefinition(beanName) : null);
-                
-				value = evaluateBeanDefinitionString(strVal, bd);
-			}
-            
+                String strVal = resolveEmbeddedValue((String) value);
+                BeanDefinition bd = (beanName != null && containsBean(beanName) ?
+                        getMergedBeanDefinition(beanName) : null);
+
+                value = evaluateBeanDefinitionString(strVal, bd);
+            }
+
             // 获取类型转换器
-			TypeConverter converter = (typeConverter != null ? typeConverter : getTypeConverter());
-			try {
+            TypeConverter converter = (typeConverter != null ? typeConverter : getTypeConverter());
+            try {
 
                 // 如果需要，则将其转换为指定类型
-				return converter.convertIfNecessary(value, type, descriptor.getTypeDescriptor());
-			}
-			catch (UnsupportedOperationException ex) {
-				// A custom TypeConverter which does not support TypeDescriptor resolution...
-				return (descriptor.getField() != null ?
-						converter.convertIfNecessary(value, type, descriptor.getField()) :
-						converter.convertIfNecessary(value, type, descriptor.getMethodParameter()));
-			}
-		}
+                return converter.convertIfNecessary(value, type, descriptor.getTypeDescriptor());
+            }
+            catch (UnsupportedOperationException ex) {
+                // A custom TypeConverter which does not support TypeDescriptor resolution...
+                return (descriptor.getField() != null ?
+                        converter.convertIfNecessary(value, type, descriptor.getField()) :
+                        converter.convertIfNecessary(value, type, descriptor.getMethodParameter()));
+            }
+        }
 
         /**
          * 集合依赖查找，如Array、List、Set、Map；
          * 内部查找依赖的方法也是使用findAutowireCandidates()
          */
-		Object multipleBeans = resolveMultipleBeans(descriptor, beanName, autowiredBeanNames, typeConverter);
+        Object multipleBeans = resolveMultipleBeans(descriptor, beanName, autowiredBeanNames, typeConverter);
 
-		if (multipleBeans != null) {
-			return multipleBeans;
-		}
+        if (multipleBeans != null) {
+            return multipleBeans;
+        }
 
         // 单例依赖查找，返回主要注入的Bean实例对象
-		Map<String, Object> matchingBeans = findAutowireCandidates(beanName, type, descriptor);
-		if (matchingBeans.isEmpty()) {
-			if (isRequired(descriptor)) {
-				raiseNoMatchingBeanFound(type, descriptor.getResolvableType(), descriptor);
-			}
-			return null;
-		}
+        Map<String, Object> matchingBeans = findAutowireCandidates(beanName, type, descriptor);
+        if (matchingBeans.isEmpty()) {
+            if (isRequired(descriptor)) {
+                raiseNoMatchingBeanFound(type, descriptor.getResolvableType(), descriptor);
+            }
+            return null;
+        }
 
-		String autowiredBeanName;
-		Object instanceCandidate;
+        String autowiredBeanName;
+        Object instanceCandidate;
 
         // 针对存在多个符合要求的匹配值，进行过滤
-		if (matchingBeans.size() > 1) {
+        if (matchingBeans.size() > 1) {
 
             /**
              * 通过以下顺序获取自动装配的Bean实例对象
              * @Primary -> @Priority 的顺序获取Bean
              */
-			autowiredBeanName = determineAutowireCandidate(matchingBeans, descriptor);
-			if (autowiredBeanName == null) {
-				if (isRequired(descriptor) || !indicatesMultipleBeans(type)) {
-					return descriptor.resolveNotUnique(descriptor.getResolvableType(), matchingBeans);
-				}
-				else {
-					return null;
-				}
-			}
-			instanceCandidate = matchingBeans.get(autowiredBeanName);
-		}
-		else {
-			// 获取精确匹配的Bean对象
-			Map.Entry<String, Object> entry = matchingBeans.entrySet().iterator().next();
-			autowiredBeanName = entry.getKey();
-			instanceCandidate = entry.getValue();
-		}
+            autowiredBeanName = determineAutowireCandidate(matchingBeans, descriptor);
+            if (autowiredBeanName == null) {
+                if (isRequired(descriptor) || !indicatesMultipleBeans(type)) {
+                    return descriptor.resolveNotUnique(descriptor.getResolvableType(), matchingBeans);
+                }
+                else {
+                    return null;
+                }
+            }
+            instanceCandidate = matchingBeans.get(autowiredBeanName);
+        }
+        else {
+            // 获取精确匹配的Bean对象
+            Map.Entry<String, Object> entry = matchingBeans.entrySet().iterator().next();
+            autowiredBeanName = entry.getKey();
+            instanceCandidate = entry.getValue();
+        }
 
         // 将匹配的Bean实例加入到Set集合中
-		if (autowiredBeanNames != null) {
-			autowiredBeanNames.add(autowiredBeanName);
-		}
-		if (instanceCandidate instanceof Class) {
-			instanceCandidate = descriptor.resolveCandidate(autowiredBeanName, type, this);
-		}
-		Object result = instanceCandidate;
+        if (autowiredBeanNames != null) {
+            autowiredBeanNames.add(autowiredBeanName);
+        }
+        if (instanceCandidate instanceof Class) {
+            instanceCandidate = descriptor.resolveCandidate(autowiredBeanName, type, this);
+        }
+        Object result = instanceCandidate;
 
         // 判断是否实现了NullBean接口
-		if (result instanceof NullBean) {
-			if (isRequired(descriptor)) {
-				raiseNoMatchingBeanFound(type, descriptor.getResolvableType(), descriptor);
-			}
-			result = null;
-		}
-		if (!ClassUtils.isAssignableValue(type, result)) {
-			throw new BeanNotOfRequiredTypeException(autowiredBeanName, type, instanceCandidate.getClass());
-		}
-		return result;
-	}
-	finally {
-		ConstructorResolver.setCurrentInjectionPoint(previousInjectionPoint);
-	}
+        if (result instanceof NullBean) {
+            if (isRequired(descriptor)) {
+                raiseNoMatchingBeanFound(type, descriptor.getResolvableType(), descriptor);
+            }
+            result = null;
+        }
+        if (!ClassUtils.isAssignableValue(type, result)) {
+            throw new BeanNotOfRequiredTypeException(autowiredBeanName, type, instanceCandidate.getClass());
+        }
+        return result;
+    }
+    finally {
+        ConstructorResolver.setCurrentInjectionPoint(previousInjectionPoint);
+    }
 }
 ```
 
@@ -1426,11 +1433,11 @@ public Object doResolveDependency(DependencyDescriptor descriptor, @Nullable Str
 >   - <1> 遍历BeanDefinitionNames中所有BeanName，通过BeanName获取Bean,  
     判断Bean是否与指定类型的Bean的类型相匹配或者说类型相一致；
 >   - <2> 当候选的Bean存在多个时，进行过滤，选择符合要求的Bean;  
-	    过滤原理：  
-		<1> 获取依赖描述器的所有注解，逐个解析  
-		<2> 解析@Qualifier注解，获取value值，判断value值是否和候选的BeanName是否相同；  
-		相同，则认为是类型匹配，将其加入到Map中；  
-		若不相同，则过滤掉；  
+        过滤原理：  
+        <1> 获取依赖描述器的所有注解，逐个解析  
+        <2> 解析@Qualifier注解，获取value值，判断value值是否和候选的BeanName是否相同；  
+        相同，则认为是类型匹配，将其加入到Map中；  
+        若不相同，则过滤掉；  
 
 ```java
 /**
@@ -1564,96 +1571,96 @@ public String[] getBeanNamesForType(@Nullable Class<?> type, boolean includeNonS
  * @Autowired注解默认使用的根据type自动注入
  */
 private String[] doGetBeanNamesForType(ResolvableType type, boolean includeNonSingletons, boolean allowEagerInit) {
-	List<String> result = new ArrayList<>();
+    List<String> result = new ArrayList<>();
 
-	// 遍历所有beanNames；beanDefinitionNames表示所有需要注入到IOC容器的Java Bean的名称
-	for (String beanName : this.beanDefinitionNames) {
-		// 判断beanName是否存在别名
-		if (!isAlias(beanName)) {
-			try {
-				// 通过beanName获取指定名称的Bean实例
-				RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
-				// Only check bean definition if it is complete.
-				if (!mbd.isAbstract() && (allowEagerInit ||
-						(mbd.hasBeanClass() || !mbd.isLazyInit() || isAllowEagerClassLoading()) &&
-								!requiresEagerInitForType(mbd.getFactoryBeanName()))) {
-					// 判断Bean是否实现了FactoryBean接口
-					boolean isFactoryBean = isFactoryBean(beanName, mbd);
-					BeanDefinitionHolder dbd = mbd.getDecoratedDefinition();
-					boolean matchFound = false;
+    // 遍历所有beanNames；beanDefinitionNames表示所有需要注入到IOC容器的Java Bean的名称
+    for (String beanName : this.beanDefinitionNames) {
+        // 判断beanName是否存在别名
+        if (!isAlias(beanName)) {
+            try {
+                // 通过beanName获取指定名称的Bean实例
+                RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
+                // Only check bean definition if it is complete.
+                if (!mbd.isAbstract() && (allowEagerInit ||
+                        (mbd.hasBeanClass() || !mbd.isLazyInit() || isAllowEagerClassLoading()) &&
+                                !requiresEagerInitForType(mbd.getFactoryBeanName()))) {
+                    // 判断Bean是否实现了FactoryBean接口
+                    boolean isFactoryBean = isFactoryBean(beanName, mbd);
+                    BeanDefinitionHolder dbd = mbd.getDecoratedDefinition();
+                    boolean matchFound = false;
 
-					// allowEagerInit 默认为true || 判断单例缓存池中是否包含key为beanName的对象
-					boolean allowFactoryBeanInit = allowEagerInit || containsSingleton(beanName);
-					boolean isNonLazyDecorated = dbd != null && !mbd.isLazyInit();
-					
-					// 不是工厂Bean，即没有实现FactoryBean接口的bean
-					if (!isFactoryBean) {
-						// includeNonSingletons默认值为true && bean是单例
-						if (includeNonSingletons || isSingleton(beanName, mbd, dbd)) {
-							// 根据类型进行匹配
-							matchFound = isTypeMatch(beanName, type, allowFactoryBeanInit);
-						}
-					}
-					else  {
-						// includeNonSingletons默认值为true
-						if (includeNonSingletons || isNonLazyDecorated ||
-								(allowFactoryBeanInit && isSingleton(beanName, mbd, dbd))) {
-							matchFound = isTypeMatch(beanName, type, allowFactoryBeanInit);
-						}
-						if (!matchFound) {
-							// 针对实现了FactoryBean接口的bean，进行类型匹配
-							beanName = FACTORY_BEAN_PREFIX + beanName;
-							matchFound = isTypeMatch(beanName, type, allowFactoryBeanInit);
-						}
-					}
-					if (matchFound) {
-						// 将符合要求的beanName加入到集合中
-						result.add(beanName);
-					}
-				}
-			}
-			catch (CannotLoadBeanClassException | BeanDefinitionStoreException ex) {
-				if (allowEagerInit) {
-					throw ex;
-				}
+                    // allowEagerInit 默认为true || 判断单例缓存池中是否包含key为beanName的对象
+                    boolean allowFactoryBeanInit = allowEagerInit || containsSingleton(beanName);
+                    boolean isNonLazyDecorated = dbd != null && !mbd.isLazyInit();
 
-				LogMessage message = (ex instanceof CannotLoadBeanClassException) ?
-						LogMessage.format("Ignoring bean class loading failure for bean '%s'", beanName) :
-						LogMessage.format("Ignoring unresolvable metadata in bean definition '%s'", beanName);
-				logger.trace(message, ex);
-				onSuppressedException(ex);
-			}
-		}
-	}
+                    // 不是工厂Bean，即没有实现FactoryBean接口的bean
+                    if (!isFactoryBean) {
+                        // includeNonSingletons默认值为true && bean是单例
+                        if (includeNonSingletons || isSingleton(beanName, mbd, dbd)) {
+                            // 根据类型进行匹配
+                            matchFound = isTypeMatch(beanName, type, allowFactoryBeanInit);
+                        }
+                    }
+                    else  {
+                        // includeNonSingletons默认值为true
+                        if (includeNonSingletons || isNonLazyDecorated ||
+                                (allowFactoryBeanInit && isSingleton(beanName, mbd, dbd))) {
+                            matchFound = isTypeMatch(beanName, type, allowFactoryBeanInit);
+                        }
+                        if (!matchFound) {
+                            // 针对实现了FactoryBean接口的bean，进行类型匹配
+                            beanName = FACTORY_BEAN_PREFIX + beanName;
+                            matchFound = isTypeMatch(beanName, type, allowFactoryBeanInit);
+                        }
+                    }
+                    if (matchFound) {
+                        // 将符合要求的beanName加入到集合中
+                        result.add(beanName);
+                    }
+                }
+            }
+            catch (CannotLoadBeanClassException | BeanDefinitionStoreException ex) {
+                if (allowEagerInit) {
+                    throw ex;
+                }
 
-	// 检查手动注册的单例beanName
-	for (String beanName : this.manualSingletonNames) {
-		try {
-			// 判断当前Bean是否实现了接口
-			if (isFactoryBean(beanName)) {
-				
-				// 单例缓存中不包括 && 单例 && 类型是否匹配
-				if ((includeNonSingletons || isSingleton(beanName)) && isTypeMatch(beanName, type)) {
-					// 将符合要求的beanNam加入到集合中
-					result.add(beanName);
-					continue;
-				}
-				// 如果实现了FactoryBean接口，修改beanName="&" + beanName
-				beanName = FACTORY_BEAN_PREFIX + beanName;
-			}
-			// 判断bean类型是否一致
-			if (isTypeMatch(beanName, type)) {
-				// 将符合要求的beanNam加入到集合中
-				result.add(beanName);
-			}
-		}
-		catch (NoSuchBeanDefinitionException ex) {
-			logger.trace(LogMessage.format("Failed to check manually registered singleton with name '%s'", beanName), ex);
-		}
-	}
-	
-	// 将List转换String[] 数组输出
-	return StringUtils.toStringArray(result);
+                LogMessage message = (ex instanceof CannotLoadBeanClassException) ?
+                        LogMessage.format("Ignoring bean class loading failure for bean '%s'", beanName) :
+                        LogMessage.format("Ignoring unresolvable metadata in bean definition '%s'", beanName);
+                logger.trace(message, ex);
+                onSuppressedException(ex);
+            }
+        }
+    }
+
+    // 检查手动注册的单例beanName
+    for (String beanName : this.manualSingletonNames) {
+        try {
+            // 判断当前Bean是否实现了接口
+            if (isFactoryBean(beanName)) {
+                
+                // 单例缓存中不包括 && 单例 && 类型是否匹配
+                if ((includeNonSingletons || isSingleton(beanName)) && isTypeMatch(beanName, type)) {
+                    // 将符合要求的beanNam加入到集合中
+                    result.add(beanName);
+                    continue;
+                }
+                // 如果实现了FactoryBean接口，修改beanName="&" + beanName
+                beanName = FACTORY_BEAN_PREFIX + beanName;
+            }
+            // 判断bean类型是否一致
+            if (isTypeMatch(beanName, type)) {
+                // 将符合要求的beanNam加入到集合中
+                result.add(beanName);
+            }
+        }
+        catch (NoSuchBeanDefinitionException ex) {
+            logger.trace(LogMessage.format("Failed to check manually registered singleton with name '%s'", beanName), ex);
+        }
+    }
+
+    // 将List转换String[] 数组输出
+    return StringUtils.toStringArray(result);
 }
 ```
 
@@ -1666,7 +1673,9 @@ private String[] doGetBeanNamesForType(ResolvableType type, boolean includeNonSi
 >   - <1> invokeAwareMethods 调用实现Aware接口的方法，Aware接口是具有标识作用的超级接口，实现了该接口的Bean是具有被Spring容器通知的能力；而被通知的方式就通过回调函数；  
   如实现ApplicatioContextAware接口的bean，即不需要注入也可以在Bean中直接获取ApplicationContext对象
 >   - <2> applyBeanPostProcessorsBeforeInitialization 调用初始化之前的postProcessBeforeInitialization后置处理器，在Bean初始化之前对其进行操作
->   - <3> invokeInitMethods 调用初始化方法，进行Bean的初始化操作
+>   - <3> invokeInitMethods 调用初始化方法，进行Bean的初始化操作；该方法分为2个小步骤：
+>       + <1> 先调用afterPropertiesSet(),支持在初始化之前针对指定的的Bean进行配置
+>       + <2> 调用初始化init() 对其进行初始化
 >   - <4> applyBeanPostProcessorsAfterInitialization 调用初始化之后的postProcessAfterInitialization后置处理器,生成代理对象（Spring AOP 动态代理）
 
 ```java
@@ -1691,7 +1700,12 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
     }
 
     try {
-        // 调用init()方法对Bean进行初始化工作
+        /**
+         * 调用init()方法对Bean进行初始化工作
+         * 该方法主要逻辑实现：
+         * <1> 先调用afterPropertiesSet(),支持在初始化之前针对指定的的Bean进行配置
+         * <2> 调用初始化init() 对其进行初始化
+         */
         invokeInitMethods(beanName, wrappedBean, mbd);
     }
     catch (Throwable ex) {

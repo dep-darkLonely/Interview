@@ -54,7 +54,7 @@ class MvcConfig implements WebMvcConfigurer {
 
 ### 2. Spring MVC框架源码调用流程分析
 
-###### <1>  AnnotationConfigWebApplicationContext.java 流程分析；
+###### <1>AnnotationConfigWebApplicationContext.java 流程分析；
 
 AnnotationConfigWebApplicationContext类图
 
@@ -202,6 +202,14 @@ protected final void refreshBeanFactory() throws BeansException {
         beanFactory.setSerializationId(getId());
         customizeBeanFactory(beanFactory);
         // ★★★ 加载BeanDefinition，将Bean封装成BeanDefinition放入BeanDefinitionMap集合中
+        /**
+         * 注册默认的处理器,主要作用是用于解析@Configuration配置文件类
+         * 1. org.springframework.context.annotation.internalConfigurationBeanNameGenerator
+         * 2. org.springframework.context.annotation.internalAutowiredAnnotationProcessor
+         * 3. org.springframework.context.event.internalEventListenerFactory
+         * 4. org.springframework.context.annotation.internalCommonAnnotationProcessor
+         * 5. org.springframework.context.event.internalEventListenerProcessor
+         */
         loadBeanDefinitions(beanFactory);
         synchronized (this.beanFactoryMonitor) {
             this.beanFactory = beanFactory;
@@ -337,6 +345,7 @@ public static void invokeBeanFactoryPostProcessors(
         // 获取BeanDefinitionRegistryPostProcessor的后置处理器
         String[] postProcessorNames =
             beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+        
         for (String ppName : postProcessorNames) {
             // 判断当前后置处理器的Bean类型 是否和PriorityOrdered一致
             if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
@@ -346,22 +355,29 @@ public static void invokeBeanFactoryPostProcessors(
         }
         // 进行排序处理
         sortPostProcessors(currentRegistryProcessors, beanFactory);
+        // 将currentRegistryProcessors中的所有后置处理器加入到registryProcessors中
         registryProcessors.addAll(currentRegistryProcessors);
         // ★★★★ 调用BeanDefinitionRegistryPostProcessor的后置处理器
         invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+        // 清空currentRegistryProcessors中数据
         currentRegistryProcessors.clear();
 
-        // Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
+        // 获取BeanDefinitionRegistryPostProcessor的后置处理器
         postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+       
         for (String ppName : postProcessorNames) {
+            // 判断当前的后置处理器的Bean类型是否和 Ordered类型一致
             if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
                 currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
                 processedBeans.add(ppName);
             }
         }
+        // 后置处理器进行排序
         sortPostProcessors(currentRegistryProcessors, beanFactory);
         registryProcessors.addAll(currentRegistryProcessors);
+        // 调用实现Ordered类型的后置处理器
         invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+        // 清空currentRegistryProcessors中数据
         currentRegistryProcessors.clear();
 
         // Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
@@ -442,7 +458,7 @@ public static void invokeBeanFactoryPostProcessors(
 }
 ```
 
-最终会调用该方法
+最终会调用该方法，用来处理配置类中定义的Bean
 
 org.springframework.context.annotation.ConfigurationClassPostProcessor#processConfigBeanDefinitions
 
@@ -453,7 +469,7 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
     // 配置类(@Configuration)已经存在于BeanDefinitionMap中
     String[] candidateNames = registry.getBeanDefinitionNames();
 
-    // 其余的不用关系，这里只关心我们的配置类(@Configuration)
+    // 其余的不用关心，这里只关心我们的配置类(@Configuration)
     for (String beanName : candidateNames) {
         BeanDefinition beanDef = registry.getBeanDefinition(beanName);
         if (ConfigurationClassUtils.isFullConfigurationClass(beanDef) ||
@@ -467,12 +483,12 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
         }
     }
 
-    // Return immediately if no @Configuration classes were found
+    // 若没有@Configuration配置类，则直接结束
     if (configCandidates.isEmpty()) {
         return;
     }
 
-    // 对多个配置类进行排序
+    // 多个配置类进行排序
     configCandidates.sort((bd1, bd2) -> {
         int i1 = ConfigurationClassUtils.getOrder(bd1.getBeanDefinition());
         int i2 = ConfigurationClassUtils.getOrder(bd2.getBeanDefinition());
@@ -502,10 +518,13 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
         this.resourceLoader, this.componentScanBeanNameGenerator, registry);
 
     Set<BeanDefinitionHolder> candidates = new LinkedHashSet<>(configCandidates);
+    // 已经解析完成的@Configuration 配置类
     Set<ConfigurationClass> alreadyParsed = new HashSet<>(configCandidates.size());
+    
     do {
         // ★★★ 解析配置类，扫描包，将扫描到的类，加入到BeanDefinitionMap集合中
         parser.parse(candidates);
+        // 验证
         parser.validate();
 
         Set<ConfigurationClass> configClasses = new LinkedHashSet<>(parser.getConfigurationClasses());
@@ -554,6 +573,173 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
     }
 }
 
+```
+
+★★  parse() 主要用于解析@Configuration配置类，将扫描到的Bean加入到BeanDefinitionMap中
+
+org.springframework.context.annotation.ConfigurationClassParser#parse(java.util.Set<org.springframework.beans.factory.config.BeanDefinitionHolder>)
+
+```java
+public void parse(Set<BeanDefinitionHolder> configCandidates) {
+    // 到这里为止，configCandidates中只含有我们自己创建的配置类@Configuration
+    for (BeanDefinitionHolder holder : configCandidates) {
+        BeanDefinition bd = holder.getBeanDefinition();
+        try {
+            if (bd instanceof AnnotatedBeanDefinition) {
+				// 获取配置类(@Configuration)上的所有注解
+                parse(((AnnotatedBeanDefinition) bd).getMetadata(), holder.getBeanName());
+            }
+            else if (bd instanceof AbstractBeanDefinition && ((AbstractBeanDefinition) bd).hasBeanClass()) {
+                parse(((AbstractBeanDefinition) bd).getBeanClass(), holder.getBeanName());
+            }
+            else {
+                parse(bd.getBeanClassName(), holder.getBeanName());
+            }
+        }
+        catch (BeanDefinitionStoreException ex) {
+            throw ex;
+        }
+        catch (Throwable ex) {
+            throw new BeanDefinitionStoreException(
+                "Failed to parse configuration class [" + bd.getBeanClassName() + "]", ex);
+        }
+    }
+
+    this.deferredImportSelectorHandler.process();
+}
+```
+
+★★ 处理配置类@Configuration
+
+org.springframework.context.annotation.ConfigurationClassParser#processConfigurationClass
+
+```java
+protected void processConfigurationClass(ConfigurationClass configClass) throws IOException {
+    // 是否应该skip
+    if (this.conditionEvaluator.shouldSkip(configClass.getMetadata(), ConfigurationPhase.PARSE_CONFIGURATION)) {
+        return;
+    }
+	
+    // 从配置类集合中获取配置类，当前配置集合类为null
+    ConfigurationClass existingClass = this.configurationClasses.get(configClass);
+    if (existingClass != null) {
+        if (configClass.isImported()) {
+            if (existingClass.isImported()) {
+                existingClass.mergeImportedBy(configClass);
+            }
+            // Otherwise ignore new imported config class; existing non-imported class overrides it.
+            return;
+        }
+        else {
+            // Explicit bean definition found, probably replacing an import.
+            // Let's remove the old one and go with the new one.
+            this.configurationClasses.remove(configClass);
+            this.knownSuperclasses.values().removeIf(configClass::equals);
+        }
+    }
+
+    
+    // ★★ 递归处理配置类
+    SourceClass sourceClass = asSourceClass(configClass);
+    do {
+        // ★★★ 处理配置类中定义的Bean，扫描包
+        sourceClass = doProcessConfigurationClass(configClass, sourceClass);
+    }
+    while (sourceClass != null);
+
+    this.configurationClasses.put(configClass, configClass);
+}
+```
+
+org.springframework.context.annotation.ConfigurationClassParser#doProcessConfigurationClass
+
+```java
+// 处理配置类
+@Nullable
+protected final SourceClass doProcessConfigurationClass(ConfigurationClass configClass, SourceClass sourceClass)
+    throws IOException {
+	// 判断当前配置中是否有@Component注解
+    if (configClass.getMetadata().isAnnotated(Component.class.getName())) {
+        // Recursively process any member (nested) classes first
+        processMemberClasses(configClass, sourceClass);
+    }
+
+    // Process any @PropertySource annotations
+    for (AnnotationAttributes propertySource : AnnotationConfigUtils.attributesForRepeatable(
+        sourceClass.getMetadata(), PropertySources.class,
+        org.springframework.context.annotation.PropertySource.class)) {
+        if (this.environment instanceof ConfigurableEnvironment) {
+            processPropertySource(propertySource);
+        }
+        else {
+            logger.info("Ignoring @PropertySource annotation on [" + sourceClass.getMetadata().getClassName() +
+                        "]. Reason: Environment must implement ConfigurableEnvironment");
+        }
+    }
+
+    // 处理@ComponentScan注解
+    // 获取@Configuration中componentScans、ComponentScan 属性值
+    Set<AnnotationAttributes> componentScans = AnnotationConfigUtils.attributesForRepeatable(
+        sourceClass.getMetadata(), ComponentScans.class, ComponentScan.class);
+    if (!componentScans.isEmpty() &&
+        !this.conditionEvaluator.shouldSkip(sourceClass.getMetadata(), ConfigurationPhase.REGISTER_BEAN)) {
+        
+        // 递归遍历解析@Configuration
+        for (AnnotationAttributes componentScan : componentScans) {
+            // 执行packageScan包扫描
+            Set<BeanDefinitionHolder> scannedBeanDefinitions =
+                this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
+            // Check the set of scanned definitions for any further config classes and parse recursively if needed
+            for (BeanDefinitionHolder holder : scannedBeanDefinitions) {
+                BeanDefinition bdCand = holder.getBeanDefinition().getOriginatingBeanDefinition();
+                if (bdCand == null) {
+                    bdCand = holder.getBeanDefinition();
+                }
+                if (ConfigurationClassUtils.checkConfigurationClassCandidate(bdCand, this.metadataReaderFactory)) {
+                    parse(bdCand.getBeanClassName(), holder.getBeanName());
+                }
+            }
+        }
+    }
+
+    // Process any @Import annotations
+    processImports(configClass, sourceClass, getImports(sourceClass), true);
+
+    // Process any @ImportResource annotations
+    AnnotationAttributes importResource =
+        AnnotationConfigUtils.attributesFor(sourceClass.getMetadata(), ImportResource.class);
+    if (importResource != null) {
+        String[] resources = importResource.getStringArray("locations");
+        Class<? extends BeanDefinitionReader> readerClass = importResource.getClass("reader");
+        for (String resource : resources) {
+            String resolvedResource = this.environment.resolveRequiredPlaceholders(resource);
+            configClass.addImportedResource(resolvedResource, readerClass);
+        }
+    }
+
+    // Process individual @Bean methods
+    Set<MethodMetadata> beanMethods = retrieveBeanMethodMetadata(sourceClass);
+    for (MethodMetadata methodMetadata : beanMethods) {
+        configClass.addBeanMethod(new BeanMethod(methodMetadata, configClass));
+    }
+
+    // Process default methods on interfaces
+    processInterfaces(configClass, sourceClass);
+
+    // Process superclass, if any
+    if (sourceClass.getMetadata().hasSuperClass()) {
+        String superclass = sourceClass.getMetadata().getSuperClassName();
+        if (superclass != null && !superclass.startsWith("java") &&
+            !this.knownSuperclasses.containsKey(superclass)) {
+            this.knownSuperclasses.put(superclass, configClass);
+            // Superclass found, return its annotation metadata and recurse
+            return sourceClass.getSuperClass();
+        }
+    }
+
+    // No superclass -> processing is complete
+    return null;
+}
 ```
 
 
@@ -830,4 +1016,6 @@ private void initHandlerMappings(ApplicationContext context) {
     }
 }
 ```
+
+
 

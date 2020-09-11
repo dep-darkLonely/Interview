@@ -30,21 +30,7 @@ public class SpringWebApplication implements WebApplicationInitializer {
 }
 ```
 
-###### <2> 配置web.xml文件，作用tomcat启动时调用SpringWebApplication的onStartUp方法;
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
-         version="4.0">
-    <listener>
-        <listener-class>com.springframework.cn.SpringWebApplication</listener-class>
-    </listener>
-</web-app>
-```
-
-###### <3> 使用@EnableWebMvc注解，启用Spring MVC
+###### <2> 使用@EnableWebMvc注解，启用Spring MVC
 
 ```java
 @EnableWebMvc
@@ -138,7 +124,7 @@ public void refresh() throws BeansException, IllegalStateException {
             // 实例化所有非懒加载的单例bean
             finishBeanFactoryInitialization(beanFactory);
 
-            // refresh做完之后需要做的其他事情。（Spring Cloud也是从这里启动）
+            // refresh做完之后需要做的其他事情，发布事件
             finishRefresh();
         }
 
@@ -167,11 +153,10 @@ public void refresh() throws BeansException, IllegalStateException {
 }
 ```
 
-###### <4>obtainFreshBeanFactory获取BeanFactory，并加载BeanDefinition
+###### <4>obtainFreshBeanFactory获取BeanFactory，并将配置类@Configurarion加载到BeanDefinitionMap
 
 - 创建Bean的扫描器
-
-- 将注册的配置类、解析并加载到BeanDefinitionMap中，后面调用BeanFactory的后置处理器对配置类的信息进行扫描，加载其余的Bean
+- 将注册的配置类、加载到BeanDefinitionMap中，为后面调用BeanFactory后置处理器解析配置类，加载剩余Bean到BeanDefinitionMap中做准备; 这里只是将annotationConfigWebApplicationContext.register(AppConfig.class)注册的配置类，加载到BeanDefinitionMap中;
 
 org.springframework.context.support.AbstractApplicationContext#obtainFreshBeanFactory
 
@@ -221,6 +206,8 @@ protected final void refreshBeanFactory() throws BeansException {
 }
 ```
 
+★★★★ **loadBeanDefinitions 解析@Configuration配置文件，并将其加入到BeanDefinitionMap集合中**
+
 org.springframework.web.context.support.AnnotationConfigWebApplicationContext#loadBeanDefinitions
 
 ```java
@@ -231,11 +218,12 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
     //  xml版本 Bean 定义 扫描器
     ClassPathBeanDefinitionScanner scanner = getClassPathBeanDefinitionScanner(beanFactory);
 
+    // BeanName生成器
     BeanNameGenerator beanNameGenerator = getBeanNameGenerator();
     if (beanNameGenerator != null) {
         reader.setBeanNameGenerator(beanNameGenerator);
         scanner.setBeanNameGenerator(beanNameGenerator);
-                   // 注册BeanName的生成器    
+        // 注册BeanName的生成器    
         beanFactory.registerSingleton(AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR, beanNameGenerator);
     }
     //  获取@scope 解析器
@@ -318,7 +306,7 @@ public static void invokeBeanFactoryPostProcessors(
 
     // Invoke BeanDefinitionRegistryPostProcessors first, if any.
     Set<String> processedBeans = new HashSet<>();
-	// 实现了该接口
+	// DefaultListableBeanFactory 实现了该接口
     if (beanFactory instanceof BeanDefinitionRegistry) {
         BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
         List<BeanFactoryPostProcessor> regularPostProcessors = new ArrayList<>();
@@ -357,7 +345,7 @@ public static void invokeBeanFactoryPostProcessors(
         sortPostProcessors(currentRegistryProcessors, beanFactory);
         // 将currentRegistryProcessors中的所有后置处理器加入到registryProcessors中
         registryProcessors.addAll(currentRegistryProcessors);
-        // ★★★★ 调用BeanDefinitionRegistryPostProcessor的后置处理器
+        // ★★★★ <1> 调用BeanDefinitionRegistryPostProcessor的后置处理器
         invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
         // 清空currentRegistryProcessors中数据
         currentRegistryProcessors.clear();
@@ -524,7 +512,6 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
     do {
         // ★★★ 解析配置类，扫描包，将扫描到的类，加入到BeanDefinitionMap集合中
         parser.parse(candidates);
-        // 验证
         parser.validate();
 
         Set<ConfigurationClass> configClasses = new LinkedHashSet<>(parser.getConfigurationClasses());
@@ -585,8 +572,9 @@ public void parse(Set<BeanDefinitionHolder> configCandidates) {
     for (BeanDefinitionHolder holder : configCandidates) {
         BeanDefinition bd = holder.getBeanDefinition();
         try {
+            // 判断当前BeanDefinition是否实现了AnnotatedBeanDefinition接口
             if (bd instanceof AnnotatedBeanDefinition) {
-				// 获取配置类(@Configuration)上的所有注解
+                // 进行转换
                 parse(((AnnotatedBeanDefinition) bd).getMetadata(), holder.getBeanName());
             }
             else if (bd instanceof AbstractBeanDefinition && ((AbstractBeanDefinition) bd).hasBeanClass()) {
@@ -651,7 +639,7 @@ protected void processConfigurationClass(ConfigurationClass configClass) throws 
 }
 ```
 
-org.springframework.context.annotation.ConfigurationClassParser#doProcessConfigurationClass
+**处理配置类** org.springframework.context.annotation.ConfigurationClassParser#doProcessConfigurationClass
 
 ```java
 // 处理配置类
@@ -660,11 +648,11 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
     throws IOException {
 	// 判断当前配置中是否有@Component注解
     if (configClass.getMetadata().isAnnotated(Component.class.getName())) {
-        // Recursively process any member (nested) classes first
+		// 处理类的成员中使用@Componet注解
         processMemberClasses(configClass, sourceClass);
     }
 
-    // Process any @PropertySource annotations
+    // 处理@PropertySource注解
     for (AnnotationAttributes propertySource : AnnotationConfigUtils.attributesForRepeatable(
         sourceClass.getMetadata(), PropertySources.class,
         org.springframework.context.annotation.PropertySource.class)) {
@@ -681,31 +669,34 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
     // 获取@Configuration中componentScans、ComponentScan 属性值
     Set<AnnotationAttributes> componentScans = AnnotationConfigUtils.attributesForRepeatable(
         sourceClass.getMetadata(), ComponentScans.class, ComponentScan.class);
+    
     if (!componentScans.isEmpty() &&
         !this.conditionEvaluator.shouldSkip(sourceClass.getMetadata(), ConfigurationPhase.REGISTER_BEAN)) {
         
-        // 递归遍历解析@Configuration
+        // 遍历componentScans
         for (AnnotationAttributes componentScan : componentScans) {
-            // 执行packageScan包扫描
+            // ★★★ 执行packageScan包扫描，返回使用@Component注解的类
             Set<BeanDefinitionHolder> scannedBeanDefinitions =
                 this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
-            // Check the set of scanned definitions for any further config classes and parse recursively if needed
+
+            // 遍历scannedBeanDefinitions中的Bean；判断是Bean中是否使用@Configuration注解，如使用了，则进行递归调用，进行解析
             for (BeanDefinitionHolder holder : scannedBeanDefinitions) {
                 BeanDefinition bdCand = holder.getBeanDefinition().getOriginatingBeanDefinition();
                 if (bdCand == null) {
                     bdCand = holder.getBeanDefinition();
                 }
                 if (ConfigurationClassUtils.checkConfigurationClassCandidate(bdCand, this.metadataReaderFactory)) {
+                    // 进行递归解析
                     parse(bdCand.getBeanClassName(), holder.getBeanName());
                 }
             }
         }
     }
 
-    // Process any @Import annotations
+    // 处理@Import注解; 这里会对使用@Import的注解进行递归调用分析
     processImports(configClass, sourceClass, getImports(sourceClass), true);
 
-    // Process any @ImportResource annotations
+    // 处理@ImportSource注解
     AnnotationAttributes importResource =
         AnnotationConfigUtils.attributesFor(sourceClass.getMetadata(), ImportResource.class);
     if (importResource != null) {
@@ -717,16 +708,26 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
         }
     }
 
-    // Process individual @Bean methods
+    /** 
+     *  处理类中@Bean注解的方法，将其@Bean中注解的方法加入到BeanDefinitionMap中,JavaConfig配置，加载SpringMVC时会解析@EnableWebMvc注解
+     *  @EnableWebMc注解:
+     *  @Retention(RetentionPolicy.RUNTIME)
+     *  @Target(ElementType.TYPE)
+     *  @Documented
+     *  @Import(DelegatingWebMvcConfiguration.class)
+     *  public @interface EnableWebMvc {
+     *  }
+     *  此时会将WebMvcConfigurationSupport该类中20个Bean加载进入到BeanDefinitionMap中
+     */
     Set<MethodMetadata> beanMethods = retrieveBeanMethodMetadata(sourceClass);
     for (MethodMetadata methodMetadata : beanMethods) {
         configClass.addBeanMethod(new BeanMethod(methodMetadata, configClass));
     }
 
-    // Process default methods on interfaces
+    // 处理接口
     processInterfaces(configClass, sourceClass);
 
-    // Process superclass, if any
+    // 处理超类
     if (sourceClass.getMetadata().hasSuperClass()) {
         String superclass = sourceClass.getMetadata().getSuperClassName();
         if (superclass != null && !superclass.startsWith("java") &&
@@ -741,6 +742,598 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
     return null;
 }
 ```
+
+**包扫描** this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
+
+org.springframework.context.annotation.ComponentScanAnnotationParser#parse
+
+```java
+// 这里是解析@Configuration注解中属性，设置属性值
+public Set<BeanDefinitionHolder> parse(AnnotationAttributes componentScan, final String declaringClass) {
+
+    // 获取扫描器
+    ClassPathBeanDefinitionScanner scanner = new ClassPathBeanDefinitionScanner(this.registry,                     componentScan.getBoolean("useDefaultFilters"), this.environment, this.resourceLoader);
+	
+    // BeanName生成器
+    Class<? extends BeanNameGenerator> generatorClass = componentScan.getClass("nameGenerator");
+    boolean useInheritedGenerator = (BeanNameGenerator.class == generatorClass);
+    // 设置BeanName
+    scanner.setBeanNameGenerator(useInheritedGenerator ? this.beanNameGenerator :
+                                 BeanUtils.instantiateClass(generatorClass));
+	
+    // 设置scope的代理模式，一般都是Default
+    ScopedProxyMode scopedProxyMode = componentScan.getEnum("scopedProxy");
+    if (scopedProxyMode != ScopedProxyMode.DEFAULT) {
+        scanner.setScopedProxyMode(scopedProxyMode);
+    }
+    else {
+        Class<? extends ScopeMetadataResolver> resolverClass = componentScan.getClass("scopeResolver");
+        scanner.setScopeMetadataResolver(BeanUtils.instantiateClass(resolverClass));
+    }
+
+    // 设置ResourcePattern
+    scanner.setResourcePattern(componentScan.getString("resourcePattern"));
+    
+    // 扫描含有某些字符的类
+    for (AnnotationAttributes filter : componentScan.getAnnotationArray("includeFilters")) {
+        for (TypeFilter typeFilter : typeFiltersFor(filter)) {
+            scanner.addIncludeFilter(typeFilter);
+        }
+    }
+    // 不扫描含有某些字符的类
+    for (AnnotationAttributes filter : componentScan.getAnnotationArray("excludeFilters")) {
+        for (TypeFilter typeFilter : typeFiltersFor(filter)) {
+            scanner.addExcludeFilter(typeFilter);
+        }
+    }
+
+    // 是否懒加载
+    boolean lazyInit = componentScan.getBoolean("lazyInit");
+    if (lazyInit) {
+        scanner.getBeanDefinitionDefaults().setLazyInit(true);
+    }
+
+    // basePackages 扫描包的信息
+    Set<String> basePackages = new LinkedHashSet<>();
+    String[] basePackagesArray = componentScan.getStringArray("basePackages");
+    for (String pkg : basePackagesArray) {
+        String[] tokenized = StringUtils.tokenizeToStringArray(this.environment.resolvePlaceholders(pkg),
+                                                               ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS);
+        Collections.addAll(basePackages, tokenized);
+    }
+    // 解析basePackageClasses信息
+    for (Class<?> clazz : componentScan.getClassArray("basePackageClasses")) {
+        basePackages.add(ClassUtils.getPackageName(clazz));
+    }
+    if (basePackages.isEmpty()) {
+        basePackages.add(ClassUtils.getPackageName(declaringClass));
+    }
+
+    scanner.addExcludeFilter(new AbstractTypeHierarchyTraversingFilter(false, false) {
+        @Override
+        protected boolean matchClassName(String className) {
+            return declaringClass.equals(className);
+        }
+    });
+    // 扫描包操作
+    return scanner.doScan(StringUtils.toStringArray(basePackages));
+}
+```
+
+org.springframework.context.annotation.ClassPathBeanDefinitionScanner#doScan
+
+```java
+protected Set<BeanDefinitionHolder> doScan(String... basePackages) {
+    Assert.notEmpty(basePackages, "At least one base package must be specified");
+    Set<BeanDefinitionHolder> beanDefinitions = new LinkedHashSet<>();
+    for (String basePackage : basePackages) {
+        // ★★★获取所有使用@Component注解的类，不包括接口、抽象类
+        Set<BeanDefinition> candidates = findCandidateComponents(basePackage);
+        // 遍历获取需要进行实例化的Bean
+        for (BeanDefinition candidate : candidates) {
+            ScopeMetadata scopeMetadata = this.scopeMetadataResolver.resolveScopeMetadata(candidate);
+            // 获取scope作用域；默认为singleton
+            candidate.setScope(scopeMetadata.getScopeName());
+            // 生成一个BeanName
+            String beanName = this.beanNameGenerator.generateBeanName(candidate, this.registry);
+            if (candidate instanceof AbstractBeanDefinition) {
+                postProcessBeanDefinition((AbstractBeanDefinition) candidate, beanName);
+            }
+            if (candidate instanceof AnnotatedBeanDefinition) {
+                AnnotationConfigUtils.processCommonDefinitionAnnotations((AnnotatedBeanDefinition) candidate);
+            }
+            if (checkCandidate(beanName, candidate)) {
+                // 将Bean进行封装
+                BeanDefinitionHolder definitionHolder = new BeanDefinitionHolder(candidate, beanName);
+                definitionHolder =
+                    AnnotationConfigUtils.applyScopedProxyMode(scopeMetadata, definitionHolder, this.registry);
+                // 将封装后的Bean加入到集合中
+                beanDefinitions.add(definitionHolder);
+                // ★ 将获取的Bean加入到BeanDefinitionMap中
+                registerBeanDefinition(definitionHolder, this.registry);
+            }
+        }
+    }
+    return beanDefinitions;
+}
+```
+
+findCandidateComponents --->    org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider#scanCandidateComponents
+
+```java
+private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
+    Set<BeanDefinition> candidates = new LinkedHashSet<>();
+    try {
+        //包路径； ex: classpath*:com/springframework/cn/*/**/*.class
+        String packageSearchPath = ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX +
+            resolveBasePackage(basePackage) + '/' + this.resourcePattern;
+        // 通过资源解析器，获取资源；获取该路径下所有的*.class资源文件
+        Resource[] resources = getResourcePatternResolver().getResources(packageSearchPath);
+        boolean traceEnabled = logger.isTraceEnabled();
+        boolean debugEnabled = logger.isDebugEnabled();
+        // 遍历Resource资源文件
+        for (Resource resource : resources) {
+            if (traceEnabled) {
+                logger.trace("Scanning " + resource);
+            }
+            // 是否可读
+            if (resource.isReadable()) {
+                try {
+                    MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(resource);
+                    // 判断是否使用了@Component注解
+                    if (isCandidateComponent(metadataReader)) {
+                        ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
+                        sbd.setResource(resource);
+                        sbd.setSource(resource);、
+                        // ★ 对当前类的类型进行判断，若是接口或者抽象类，则跳过；
+                        if (isCandidateComponent(sbd)) {
+                            if (debugEnabled) {
+                                logger.debug("Identified candidate component class: " + resource);
+                            }
+                            // 加入到candidate集合中
+                            candidates.add(sbd);
+                        }
+                        else {
+                            if (debugEnabled) {
+                                logger.debug("Ignored because not a concrete top-level class: " + resource);
+                            }
+                        }
+                    }
+                    else {
+                        if (traceEnabled) {
+                            logger.trace("Ignored because not matching any filter: " + resource);
+                        }
+                    }
+                }
+                catch (Throwable ex) {
+                    throw new BeanDefinitionStoreException(
+                        "Failed to read candidate component class: " + resource, ex);
+                }
+            }
+            else {
+                if (traceEnabled) {
+                    logger.trace("Ignored because not readable: " + resource);
+                }
+            }
+        }
+    }
+    catch (IOException ex) {
+        throw new BeanDefinitionStoreException("I/O failure during classpath scanning", ex);
+    }
+    // 返回候选的component
+    return candidates;
+}
+```
+
+###### <6> finishBeanFactoryInitialization(beanFactory);  完成剩余的Bean的初始化工作
+
+- 详细调用流程参考[Spring源码分析调用流程]
+- 这里只分析SpringMVC中的9大核心组件中RequestMappingHandlerMapping的初始化工作
+
+ 初始化Bean
+
+org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory#initializeBean(java.lang.String, java.lang.Object, org.springframework.beans.factory.support.RootBeanDefinition)
+
+```java
+// 初始化Bean
+protected Object initializeBean(final String beanName, final Object bean, @Nullable RootBeanDefinition mbd) {
+    if (System.getSecurityManager() != null) {
+        AccessController.doPrivileged((PrivilegedAction<Object>) () -> {
+            invokeAwareMethods(beanName, bean);
+            return null;
+        }, getAccessControlContext());
+    }
+    else {
+        // 调用aware方法，设置属性
+        invokeAwareMethods(beanName, bean);
+    }
+
+    Object wrappedBean = bean;
+    if (mbd == null || !mbd.isSynthetic()) {
+        // 初始化Bean之前调用Bean的后置处理器
+        wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
+    }
+
+    try {
+        // ★★ 调用init方法进行初始化
+        invokeInitMethods(beanName, wrappedBean, mbd);
+    }
+    catch (Throwable ex) {
+        throw new BeanCreationException(
+            (mbd != null ? mbd.getResourceDescription() : null),
+            beanName, "Invocation of init method failed", ex);
+    }
+    if (mbd == null || !mbd.isSynthetic()) {
+        // 初始化Bean之后调用Bean的后置处理器
+        wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
+    }
+
+    return wrappedBean;
+}
+```
+
+调用init方法对Bean进行初始化工作
+
+org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory#invokeInitMethods
+
+```java
+protected void invokeInitMethods(String beanName, final Object bean, @Nullable RootBeanDefinition mbd)
+    throws Throwable {
+
+    // 判断当前Bean是否实现了InitializingBean接口
+    boolean isInitializingBean = (bean instanceof InitializingBean);
+    if (isInitializingBean && (mbd == null || !mbd.isExternallyManagedInitMethod("afterPropertiesSet"))) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("Invoking afterPropertiesSet() on bean with name '" + beanName + "'");
+        }
+        if (System.getSecurityManager() != null) {
+            try {
+                AccessController.doPrivileged((PrivilegedExceptionAction<Object>) () -> {
+                    ((InitializingBean) bean).afterPropertiesSet();
+                    return null;
+                }, getAccessControlContext());
+            }
+            catch (PrivilegedActionException pae) {
+                throw pae.getException();
+            }
+        }
+        else {
+            // 回调afterPropertiesSet()
+            ((InitializingBean) bean).afterPropertiesSet();
+        }
+    }
+
+	// 调用init方法，进行初始化工作
+    if (mbd != null && bean.getClass() != NullBean.class) {
+        String initMethodName = mbd.getInitMethodName();
+        if (StringUtils.hasLength(initMethodName) &&
+            !(isInitializingBean && "afterPropertiesSet".equals(initMethodName)) &&
+            !mbd.isExternallyManagedInitMethod(initMethodName)) {
+            invokeCustomInitMethod(beanName, bean, mbd);
+        }
+    }
+}
+```
+
+★★★ SpringMVC的9大核心组件都实现了InitializingBean接口
+
+- RequestMappingHandlerMapping
+
+  ![image-20200911160733739](.\Image\Spring\RequestMappingHandlerMapping.png)
+
+- RequestMappingHandlerAdapter
+
+  ![image-20200911161027773](.\Image\Spring\RequestMappingHandlerAdapter.png)
+
+- 其余核心组件类图...
+
+RequestMappingHandlerMapping Bean的初始化分析
+
+org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping#afterPropertiesSet
+
+```java
+@Override
+public void afterPropertiesSet() {
+    // 构建一个配置文件
+    this.config = new RequestMappingInfo.BuilderConfiguration();
+    // 设置参数
+    this.config.setUrlPathHelper(getUrlPathHelper());
+    this.config.setPathMatcher(getPathMatcher());
+    this.config.setSuffixPatternMatch(this.useSuffixPatternMatch);
+    this.config.setTrailingSlashMatch(this.useTrailingSlashMatch);
+    this.config.setRegisteredSuffixPatternMatch(this.useRegisteredSuffixPatternMatch);
+    this.config.setContentNegotiationManager(getContentNegotiationManager());
+	// 回调父级afterPropertiesSet()函数
+    super.afterPropertiesSet();
+}
+```
+
+org.springframework.web.servlet.handler.AbstractHandlerMethodMapping#afterPropertiesSet
+
+```java
+@Override
+public void afterPropertiesSet() {
+    // 初始化handle方法
+    initHandlerMethods();
+}
+```
+
+初始化handle方法 org.springframework.web.servlet.handler.AbstractHandlerMethodMapping#initHandlerMethods
+
+```java
+protected void initHandlerMethods() {
+    // 获取所有的Bean
+    for (String beanName : getCandidateBeanNames()) {
+        // 判断当前Bean是否是以scopedTarget.开头的Bean
+        if (!beanName.startsWith(SCOPED_TARGET_NAME_PREFIX)) {
+            // ★★ 处理候选的Bean
+            processCandidateBean(beanName);
+        }
+    }
+    // ???
+    handlerMethodsInitialized(getHandlerMethods());
+}
+```
+
+org.springframework.web.servlet.handler.AbstractHandlerMethodMapping#processCandidateBean
+
+```java
+protected void processCandidateBean(String beanName) {
+    Class<?> beanType = null;
+    try {
+        // 获取BeanType， 即就是Class类型
+        beanType = obtainApplicationContext().getType(beanName);
+    }
+    catch (Throwable ex) {
+        // An unresolvable bean type, probably from a lazy bean - let's ignore it.
+        if (logger.isTraceEnabled()) {
+            logger.trace("Could not resolve type for bean '" + beanName + "'", ex);
+        }
+    }
+    // beanType 不能为null && (beanType中使用了@Controller || @RquestMapping)
+    if (beanType != null && isHandler(beanType)) {
+        // 检测hanlde方法
+        detectHandlerMethods(beanName);
+    }
+}
+```
+
+查找handler方法
+
+org.springframework.web.servlet.handler.AbstractHandlerMethodMapping#detectHandlerMethods
+
+```java
+protected void detectHandlerMethods(Object handler) {
+    // 获取handler的class类型
+	Class<?> handlerType = (handler instanceof String ?
+			obtainApplicationContext().getType((String) handler) : handler.getClass());
+
+	if (handlerType != null) {
+        // ★获取真实的Class类型，此处用于解析代理类
+		Class<?> userType = ClassUtils.getUserClass(handlerType);
+        // method: 通过反射获取方法:ReflectionUtils.doWithMethods; T：RequestMappingInfo该方法对象的@RequestMapping信息
+		Map<Method, T> methods = MethodIntrospector.selectMethods(userType,
+				(MethodIntrospector.MetadataLookup<T>) method -> {
+					try {
+						return getMappingForMethod(method, userType);
+					}
+					catch (Throwable ex) {
+						throw new IllegalStateException("Invalid mapping on handler class [" +
+								userType.getName() + "]: " + method, ex);
+					}
+				});
+		if (logger.isTraceEnabled()) {
+			logger.trace(formatMappings(userType, methods));
+		}
+        // 遍历获取的Methods
+		methods.forEach((method, mapping) -> {
+			Method invocableMethod = AopUtils.selectInvocableMethod(method, userType);
+            /**
+             * 将mapping映射路径与该URl的处理方法加入到mappingLookup集合中；
+             * Map<T, handleMethod> 
+             * key 为 mapping的映射路径
+             * value 为 该映射路径的处理方法
+             */
+			registerHandlerMethod(handler, invocableMethod, mapping);
+		});
+	}
+}
+```
+
+获取方法的映射信息，并将其封装成RequestMappingInfo对象
+
+org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping#getMappingForMethod
+
+```java
+@Override
+@Nullable
+protected RequestMappingInfo getMappingForMethod(Method method, Class<?> handlerType) {
+    // 获取Method上的@RequestMapping注解信息
+    RequestMappingInfo info = createRequestMappingInfo(method);
+    if (info != null) {
+        // 获取Class上的@RequestMapping注解信息
+        RequestMappingInfo typeInfo = createRequestMappingInfo(handlerType);
+        if (typeInfo != null) {
+            // 合并信息
+            info = typeInfo.combine(info);
+        }
+        String prefix = getPathPrefix(handlerType);
+        if (prefix != null) {
+            info = RequestMappingInfo.paths(prefix).build().combine(info);
+        }
+    }
+    // 返回RequestMappingInfo信息； RequestMapping信息中包括了请求参数、返回值类型....
+    return info;
+}
+```
+
+初始化剩余的SpringMVC的核心组件的Bean
+
+###### <7> finishRefresh（）所有Bean初始化完成之后，调用LifecycleProcessor的onfresh()发布响应事件
+
+org.springframework.context.support.AbstractApplicationContext#finishRefresh
+
+```java
+protected void finishRefresh() {
+    // 清空资源缓存
+    clearResourceCaches();
+
+    // 初始化context的生命周期处理器
+    initLifecycleProcessor();
+
+    // 刷新
+    getLifecycleProcessor().onRefresh();
+
+    // 发布响应事件
+    publishEvent(new ContextRefreshedEvent(this));
+
+    // Participate in LiveBeansView MBean, if active.
+    LiveBeansView.registerApplicationContext(this);
+}
+```
+
+最终会调用该方法
+
+org.springframework.context.support.AbstractApplicationContext#publishEvent(java.lang.Object, org.springframework.core.ResolvableType)
+
+```java
+protected void publishEvent(Object event, @Nullable ResolvableType eventType) {
+	Assert.notNull(event, "Event must not be null");
+
+	// Decorate event as an ApplicationEvent if necessary
+	ApplicationEvent applicationEvent;
+	if (event instanceof ApplicationEvent) {
+		applicationEvent = (ApplicationEvent) event;
+	}
+	else {
+		applicationEvent = new PayloadApplicationEvent<>(this, event);
+		if (eventType == null) {
+			eventType = ((PayloadApplicationEvent<?>) applicationEvent).getResolvableType();
+		}
+	}
+
+	// Multicast right now if possible - or lazily once the multicaster is initialized
+	if (this.earlyApplicationEvents != null) {
+		this.earlyApplicationEvents.add(applicationEvent);
+	}
+	else {
+        // ★★ 获取事件传播器，进行时间事件传播，SpringMVC中Dispatcher使用该方法进行初始化策略
+		getApplicationEventMulticaster().multicastEvent(applicationEvent, eventType);
+	}
+
+	// Publish event via parent context as well...
+	if (this.parent != null) {
+		if (this.parent instanceof AbstractApplicationContext) {
+			((AbstractApplicationContext) this.parent).publishEvent(event, eventType);
+		}
+		else {
+			this.parent.publishEvent(event);
+		}
+	}
+}
+```
+
+事件传播的底层调用multicastEvent
+
+org.springframework.context.event.SimpleApplicationEventMulticaster#doInvokeListener
+
+```java
+@SuppressWarnings({"rawtypes", "unchecked"})
+private void doInvokeListener(ApplicationListener listener, ApplicationEvent event) {
+    try {
+        // 监听器，调用onApplicationEvent；SpringMVC中DispatcherServlet实现了该方法
+        listener.onApplicationEvent(event);
+    }
+    catch (ClassCastException ex) {
+        String msg = ex.getMessage();
+        if (msg == null || matchesClassCastMessage(msg, event.getClass())) {
+            // Possibly a lambda-defined listener which we could not resolve the generic event type for
+            // -> let's suppress the exception and just log a debug message.
+            Log logger = LogFactory.getLog(getClass());
+            if (logger.isTraceEnabled()) {
+                logger.trace("Non-matching event type for listener: " + listener, ex);
+            }
+        }
+        else {
+            throw ex;
+        }
+    }
+}
+
+```
+
+- SpringMVC 中使用到了监听器模式
+
+![image-20200909223015613](.\Image\Spring\DispatcherServlet.png)
+
+org.springframework.web.servlet.FrameworkServlet#onApplicationEvent
+
+```java
+public void onApplicationEvent(ContextRefreshedEvent event) {
+   this.refreshEventReceived = true;
+   synchronized (this.onRefreshMonitor) {
+      onRefresh(event.getApplicationContext());
+   }
+}
+```
+
+调用onFresh()方法初始化策略
+
+```java
+/**
+	 * This implementation calls {@link #initStrategies}.
+	 */
+@Override
+protected void onRefresh(ApplicationContext context) {
+    initStrategies(context);
+}
+```
+
+```java
+protected void initStrategies(ApplicationContext context) {
+    initMultipartResolver(context);
+    initLocaleResolver(context);
+    initThemeResolver(context);
+    initHandlerMappings(context);
+    initHandlerAdapters(context);
+    initHandlerExceptionResolvers(context);
+    initRequestToViewNameTranslator(context);
+    initViewResolvers(context);
+    initFlashMapManager(context);
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

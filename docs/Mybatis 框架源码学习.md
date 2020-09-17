@@ -441,6 +441,30 @@ public int scan(String... basePackages) {
 }
 ```
 
+★★★ ClassPathMapperScanner 这个类的作用就是扫描ClassPath 路径下Mapper接口，扫描并注册到BeanDefinitionMap集合中
+
+- 扫描并注册候选的BeanDefinition对象，也就是Dao接口的BeanDefinition对象，将其注册到BeanDefinitionMap集合中
+- **★★ 调用processBeanDefinitions()，用来修改Mapper接口的BeanClass类型为MapperFactoryBean类型；BeanClass类型为当前Bean对象对应的原始类型，替换Mapper接口的BeanClass类型，将实际的类型当前构造器参数，这里了涉及到一个设计模式：建造者模式**
+
+org.mybatis.spring.mapper.ClassPathMapperScanner#doScan
+
+```java
+@Override
+public Set<BeanDefinitionHolder> doScan(String... basePackages) {
+    Set<BeanDefinitionHolder> beanDefinitions = super.doScan(basePackages);
+
+    if (beanDefinitions.isEmpty()) {
+        logger.warn("No MyBatis mapper was found in '" + Arrays.toString(basePackages) + "' package. Please check your configuration.");
+    } else {
+        processBeanDefinitions(beanDefinitions);
+    }
+
+    return beanDefinitions;
+}
+```
+
+调用父类的doScan()进行扫描包操作
+
 ```java
 protected Set<BeanDefinitionHolder> doScan(String... basePackages) {
     Assert.notEmpty(basePackages, "At least one base package must be specified");

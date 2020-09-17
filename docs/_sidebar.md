@@ -25,12 +25,13 @@
     - [设计模式](Interview_DesignMode.md)
 
 * 框架
-    - [Spring基础知识](Spring.md)
-- [Spring的配置方式及Tomcat加载Spring的流程](Spring_StartUp.md)
-    - [Spring源码学习<1>](Spring_1.md)
-- [Spring源码学习<2>](Spring_2.md)
-    - [手写Spring](Spring_handWrite.md)
-- [SpringMVC源码学习](./Spring MVC 框架源码学习)
+    1. [Spring基础知识](Spring.md)
+2. [Spring的配置方式及Tomcat加载Spring的流程](Spring_StartUp.md)
+    3. [Spring源码学习<1>](Spring_1.md)
+4. [Spring源码学习<2>](Spring_2.md)
+    5. [手写Spring](Spring_handWrite.md)
+6. [SpringMVC源码学习](./Spring MVC 框架源码学习)
+    7. [MyBatis框架学习](./mybatis.md)
 
 
 * 中间件

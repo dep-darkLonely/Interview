@@ -2,8 +2,6 @@
 
 # Spring MVC 框架源码学习(JavaConfig)
 
-
-
 ### 1. 创建Demo工程，用于分析Spring MVC框架源码(采用注解版本)
 
 ###### <1> 创建SpringWebApplication，用于加载Spring IOC容器和注册DispatcherServlet

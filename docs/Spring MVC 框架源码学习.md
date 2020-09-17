@@ -639,7 +639,7 @@ protected void processConfigurationClass(ConfigurationClass configClass) throws 
 }
 ```
 
-**处理配置类** org.springframework.context.annotation.ConfigurationClassParser#doProcessConfigurationClass
+**★★★ 处理配置类** org.springframework.context.annotation.ConfigurationClassParser#doProcessConfigurationClass
 
 ```java
 // 处理配置类

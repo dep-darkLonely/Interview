@@ -565,10 +565,10 @@ private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
                     if (isCandidateComponent(metadataReader)) {
                         ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
                         sbd.setResource(resource);
-                        sbd.setSource(resource);、
+                        sbd.setSource(resource);
                         // ★★★★★
                         // Spring中对当前类的类型进行判断，若是接口或者抽象类，则跳过；
-                        //
+                        // Mybatis中ClassPathMapperScanner对该方法进行了重写，若class为Interface && 单独(顶层接口)，则为true；其余则为false；这里只处理接口
                         if (isCandidateComponent(sbd)) {
                             if (debugEnabled) {
                                 logger.debug("Identified candidate component class: " + resource);
@@ -607,4 +607,10 @@ private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
     return candidates;
 }
 ```
+
+★★★ ClassPathMapperScanner 类图
+
+![image-20200918161837740](.\Image\Mybatis\ClassPathMapperScanner.png)
+
+ClassPathMapperScanner 方法图
 

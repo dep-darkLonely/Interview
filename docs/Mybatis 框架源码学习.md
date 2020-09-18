@@ -451,11 +451,15 @@ org.mybatis.spring.mapper.ClassPathMapperScanner#doScan
 ```java
 @Override
 public Set<BeanDefinitionHolder> doScan(String... basePackages) {
+    
+    // 调用父类的包扫描
     Set<BeanDefinitionHolder> beanDefinitions = super.doScan(basePackages);
 
     if (beanDefinitions.isEmpty()) {
         logger.warn("No MyBatis mapper was found in '" + Arrays.toString(basePackages) + "' package. Please check your configuration.");
     } else {
+        // ★★★  修改BeanDefinition的BeanClass属性修改为MapperFactoryBean
+        // 设置构造器参数
         processBeanDefinitions(beanDefinitions);
     }
 
@@ -465,6 +469,8 @@ public Set<BeanDefinitionHolder> doScan(String... basePackages) {
 
 调用父类的doScan()进行扫描包操作
 
+org.springframework.context.annotation.ClassPathBeanDefinitionScanner#doScan
+
 ```java
 protected Set<BeanDefinitionHolder> doScan(String... basePackages) {
     Assert.notEmpty(basePackages, "At least one base package must be specified");
@@ -473,27 +479,132 @@ protected Set<BeanDefinitionHolder> doScan(String... basePackages) {
     // 遍历package
     for (String basePackage : basePackages) {
         
+        // ★★★ 从给定的basePackage中扫描给符合要求的组件即候选的组件
         Set<BeanDefinition> candidates = findCandidateComponents(basePackage);
+        // 遍历候选的Bean
         for (BeanDefinition candidate : candidates) {
+            // 使用scopeMetadataResolver解析器解析候选的Bean对象，获取scopeMetadata
             ScopeMetadata scopeMetadata = this.scopeMetadataResolver.resolveScopeMetadata(candidate);
+            // 设置scope作用域
             candidate.setScope(scopeMetadata.getScopeName());
+            // 使用BeanName生成器，生成一个BeanName
             String beanName = this.beanNameGenerator.generateBeanName(candidate, this.registry);
+            // 判断当前候选的Bean是否实现了AbstractBeanDefinition接口
             if (candidate instanceof AbstractBeanDefinition) {
                 postProcessBeanDefinition((AbstractBeanDefinition) candidate, beanName);
             }
+            // 判断当前候选的Bean是否实现了AnnotatedBeanDefinition接口
             if (candidate instanceof AnnotatedBeanDefinition) {
                 AnnotationConfigUtils.processCommonDefinitionAnnotations((AnnotatedBeanDefinition) candidate);
             }
+            
+            // 检查候选的Bean对象
             if (checkCandidate(beanName, candidate)) {
+                // 将Bean对象封装成BeanDefinitionHolder对象
                 BeanDefinitionHolder definitionHolder = new BeanDefinitionHolder(candidate, beanName);
+                // 设置作用域的代理模式
                 definitionHolder =
                     AnnotationConfigUtils.applyScopedProxyMode(scopeMetadata, definitionHolder, this.registry);
+                // 将Bean添加到集合BeanDefinitions集合中
                 beanDefinitions.add(definitionHolder);
+                // 将BeanDefinition对象注册到BeanDefinitionMap集合中，即这里可以将UserDao接口对象
                 registerBeanDefinition(definitionHolder, this.registry);
             }
         }
     }
     return beanDefinitions;
+}
+```
+
+获取指定包路径下的候选的Component
+
+org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider#findCandidateComponents
+
+```java
+/**
+ * Scan the class path for candidate components.
+ * @param basePackage the package to check for annotated classes
+ * @return a corresponding Set of autodetected bean definitions
+ */
+public Set<BeanDefinition> findCandidateComponents(String basePackage) {
+    if (this.componentsIndex != null && indexSupportsIncludeFilters()) {
+        return addCandidateComponentsFromIndex(this.componentsIndex, basePackage);
+    }
+    else {
+        // 扫描候选的Components
+        return scanCandidateComponents(basePackage);
+    }
+}
+```
+
+扫描组件scanCandidateComponents
+
+org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider#scanCandidateComponents
+
+```java
+private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
+    Set<BeanDefinition> candidates = new LinkedHashSet<>();
+    try {
+        //包路径； ex: classpath*:com/springframework/cn/*/**/*.class
+        String packageSearchPath = ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX +
+            resolveBasePackage(basePackage) + '/' + this.resourcePattern;
+        // 通过资源解析器，获取资源；获取该路径下所有的*.class资源文件
+        Resource[] resources = getResourcePatternResolver().getResources(packageSearchPath);
+        boolean traceEnabled = logger.isTraceEnabled();
+        boolean debugEnabled = logger.isDebugEnabled();
+        // 遍历Resource资源文件
+        for (Resource resource : resources) {
+            if (traceEnabled) {
+                logger.trace("Scanning " + resource);
+            }
+            // 是否可读
+            if (resource.isReadable()) {
+                try {
+                    MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(resource);
+                    // 判断是否使用了@Component注解
+                    if (isCandidateComponent(metadataReader)) {
+                        ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
+                        sbd.setResource(resource);
+                        sbd.setSource(resource);、
+                        // ★★★★★
+                        // Spring中对当前类的类型进行判断，若是接口或者抽象类，则跳过；
+                        //
+                        if (isCandidateComponent(sbd)) {
+                            if (debugEnabled) {
+                                logger.debug("Identified candidate component class: " + resource);
+                            }
+                            // 加入到candidate集合中
+                            candidates.add(sbd);
+                        }
+                        else {
+                            if (debugEnabled) {
+                                logger.debug("Ignored because not a concrete top-level class: " + resource);
+                            }
+                        }
+                    }
+                    else {
+                        if (traceEnabled) {
+                            logger.trace("Ignored because not matching any filter: " + resource);
+                        }
+                    }
+                }
+                catch (Throwable ex) {
+                    throw new BeanDefinitionStoreException(
+                        "Failed to read candidate component class: " + resource, ex);
+                }
+            }
+            else {
+                if (traceEnabled) {
+                    logger.trace("Ignored because not readable: " + resource);
+                }
+            }
+        }
+    }
+    catch (IOException ex) {
+        throw new BeanDefinitionStoreException("I/O failure during classpath scanning", ex);
+    }
+    // 返回候选的component
+    return candidates;
 }
 ```
 

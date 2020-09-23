@@ -384,7 +384,7 @@ PooledDataSource 是默认的数据源连接池，实现了DataSource接口
 
 4. 完成refresh()，发布事件，回调onApplicationEvent
 
-3.1 调用MapperScannerConfigurer的postProcessBeanDefinitionRegistry方法，扫描Mapper接口
+###### 3.1 调用MapperScannerConfigurer的postProcessBeanDefinitionRegistry方法，扫描Mapper接口
 
 org.mybatis.spring.mapper.MapperScannerConfigurer#postProcessBeanDefinitionRegistry
 
@@ -709,6 +709,926 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
     if (existingDefinition != null || containsSingleton(beanName)) {
         resetBeanDefinition(beanName);
     }
+}
+```
+
+**★★★  processBeanDefinitions()修改BeanDefinition的BeanClass属性修改为MapperFactoryBean并且设置构造器参数**
+
+org.mybatis.spring.mapper.ClassPathMapperScanner#processBeanDefinitions
+
+```java
+private void processBeanDefinitions(Set<BeanDefinitionHolder> beanDefinitions) {
+    GenericBeanDefinition definition;
+    // 遍历扫描到Mapper接口
+    for (BeanDefinitionHolder holder : beanDefinitions) {
+      // 获取BeanDefinition，并强制转换为GenericBeanDefinition
+      definition = (GenericBeanDefinition) holder.getBeanDefinition();
+      // 获取beanClassName
+      // ex: userDao --> com.springframework.cn.dao.UserDao
+      String beanClassName = definition.getBeanClassName();
+      LOGGER.debug(() -> "Creating MapperFactoryBean with name '" + holder.getBeanName() + "' and '" + beanClassName
+          + "' mapperInterface");
+
+      // the mapper interface is the original class of the bean
+      // but, the actual class of the bean is MapperFactoryBean
+      // ★★ 设置BeanDefinition实例化时的参数值; 
+      // ex: com.springframework.cn.dao.UserDao
+      definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName); // issue #59
+      // ★★ 设置beanDefinition的具体类型为MapperFactoryBean,具体的类而不是接口或者抽象类
+      definition.setBeanClass(this.mapperFactoryBeanClass);
+      // 设置属性值
+      definition.getPropertyValues().add("addToConfig", this.addToConfig);
+
+      boolean explicitFactoryUsed = false;
+      if (StringUtils.hasText(this.sqlSessionFactoryBeanName)) {
+        definition.getPropertyValues().add("sqlSessionFactory",
+            new RuntimeBeanReference(this.sqlSessionFactoryBeanName));
+        explicitFactoryUsed = true;
+      } else if (this.sqlSessionFactory != null) {
+        definition.getPropertyValues().add("sqlSessionFactory", this.sqlSessionFactory);
+        explicitFactoryUsed = true;
+      }
+
+      if (StringUtils.hasText(this.sqlSessionTemplateBeanName)) {
+        if (explicitFactoryUsed) {
+          LOGGER.warn(
+              () -> "Cannot use both: sqlSessionTemplate and sqlSessionFactory together. sqlSessionFactory is ignored.");
+        }
+        definition.getPropertyValues().add("sqlSessionTemplate",
+            new RuntimeBeanReference(this.sqlSessionTemplateBeanName));
+        explicitFactoryUsed = true;
+      } else if (this.sqlSessionTemplate != null) {
+        if (explicitFactoryUsed) {
+          LOGGER.warn(
+              () -> "Cannot use both: sqlSessionTemplate and sqlSessionFactory together. sqlSessionFactory is ignored.");
+        }
+        definition.getPropertyValues().add("sqlSessionTemplate", this.sqlSessionTemplate);
+        explicitFactoryUsed = true;
+      }
+
+      if (!explicitFactoryUsed) {
+        LOGGER.debug(() -> "Enabling autowire by type for MapperFactoryBean with name '" + holder.getBeanName() + "'.");
+        // 设置注入模式为根据类型注入
+        definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
+      }
+      definition.setLazyInit(lazyInitialization);
+    }
+  }
+```
+
+整个Mybatis的核心
+
+```java
+// ★★ 设置BeanDefinition实例化时的参数值;  
+// ex: com.springframework.cn.dao.UserDao
+definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName); // issue #59
+// ★★ 设置beanDefinition的具体类型为MapperFactoryBean,具体的类而不是接口或者抽象类
+definition.setBeanClass(this.mapperFactoryBeanClass);
+```
+
+**在这里将BeanDefinition中bean的实际类型 接口 → MapperFactoryBean类，即实例化完成之后，(userDao)接口的Bean类型不是UserDao而是MapperFactoryBean类型**
+
+###### 3.2 实例化剩余的所有单例的Bean对象，并将其加入到单例缓存池singletonObjects集合中
+
+- Dao接口在 实例化 → 填充属性 → 初始化 过程中与普通Bean基本是相同的
+- 不同之处在创建动态代理的时机不同，AOP动态代理是在对象初始化完成之后的后置处理器applyBeanPostProcessorsAfterInitialization时产生代理对象；而Dao在此时是不会产生动态代理，产生动态代理是getObjectForBeanInstance时产生
+
+###### 3.3  IOC中Bean的真实类型为MapperFactoryBean类型，该类型会产生一个代理对象
+
+org.springframework.beans.factory.support.AbstractBeanFactory#doGetBean
+
+```java
+@SuppressWarnings("unchecked")
+protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredType,
+                          @Nullable final Object[] args, boolean typeCheckOnly) throws BeansException {
+    ...
+    // Create bean instance.
+	if (mbd.isSingleton()) {
+        // 从单例缓存池中获取对象，若单例缓存池中不存在，则进行创建
+        // userDao → MapperFactoryBean@xxx 实例
+		sharedInstance = getSingleton(beanName, () -> {
+			try {
+				return createBean(beanName, mbd, args);
+			}
+			catch (BeansException ex) {
+				// Explicitly remove instance from singleton cache: It might have been put there
+				// eagerly by the creation process, to allow for circular reference resolution.
+				// Also remove any beans that received a temporary reference to the bean.
+				destroySingleton(beanName);
+				throw ex;
+			}
+		});
+        // ★★★ 生产一个MapperFactoryBean的动态代理对象，使用的是JDK动态代理
+		bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
+	}
+    ...
+```
+
+获取BeanInstance的实例对象，若当前Bean没有实现FactoryBean接口，则返回当前Bean实例，若实现了该接口，则返回代理对象
+
+org.springframework.beans.factory.support.AbstractBeanFactory#getObjectForBeanInstance
+
+```java
+protected Object getObjectForBeanInstance(
+			Object beanInstance, String name, String beanName, @Nullable RootBeanDefinition mbd) {
+
+    // 判断当前Bean是否是工厂Bean，工厂Bean的name都是用&开头
+    if (BeanFactoryUtils.isFactoryDereference(name)) {
+        if (beanInstance instanceof NullBean) {
+            return beanInstance;
+        }
+        if (!(beanInstance instanceof FactoryBean)) {
+            throw new BeanIsNotAFactoryException(beanName, beanInstance.getClass());
+        }
+        if (mbd != null) {
+            mbd.isFactoryBean = true;
+        }
+        return beanInstance;
+    }
+
+    // 普通Bean对象
+    if (!(beanInstance instanceof FactoryBean)) {
+        return beanInstance;
+    }
+
+    // 实现了FactoryBean对象的Bean
+    Object object = null;
+    // 这里的mbd是MapperFactoryBean@xxx 
+    if (mbd != null) {
+        // 设置isFactoryBean属性
+        mbd.isFactoryBean = true;
+    }
+    else {
+        object = getCachedObjectForFactoryBean(beanName);
+    }
+    if (object == null) {
+        // 将Bean转换FactoryBean类型
+        FactoryBean<?> factory = (FactoryBean<?>) beanInstance;
+
+        if (mbd == null && containsBeanDefinition(beanName)) {
+            mbd = getMergedLocalBeanDefinition(beanName);
+        }
+        boolean synthetic = (mbd != null && mbd.isSynthetic());
+        // ★★★ 使用FactoryBean<?>(MapperFactoryBean)工厂来产生一个Bean代理对象
+        object = getObjectFromFactoryBean(factory, beanName, !synthetic);
+    }
+    return object;
+}
+```
+
+★★★ 使用FactoryBean<?>产生一个MapperFactoryBean的代理对象
+
+```java
+protected Object getObjectFromFactoryBean(FactoryBean<?> factory, String beanName, boolean shouldPostProcess) {
+    if (factory.isSingleton() && containsSingleton(beanName)) {
+        synchronized (getSingletonMutex()) {
+            // 从factoryBeanObjectCache缓存中获取指定beanName的对象，
+            // 该缓存主要用来保存FactoryBean创建的对象
+            Object object = this.factoryBeanObjectCache.get(beanName);
+            if (object == null) {
+                // ★★★ 获取指定的beanName的代理对象
+                object = doGetObjectFromFactoryBean(factory, beanName);
+                // Only post-process and store if not put there already during getObject() call above
+                // (e.g. because of circular reference processing triggered by custom getBean calls)
+                Object alreadyThere = this.factoryBeanObjectCache.get(beanName);
+                if (alreadyThere != null) {
+                    object = alreadyThere;
+                }
+                else {
+                    if (shouldPostProcess) {
+                        if (isSingletonCurrentlyInCreation(beanName)) {
+                            // Temporarily return non-post-processed object, not storing it yet..
+                            return object;
+                        }
+                        beforeSingletonCreation(beanName);
+                        try {
+                            object = postProcessObjectFromFactoryBean(object, beanName);
+                        }
+                        catch (Throwable ex) {
+                            throw new BeanCreationException(beanName,
+                                                            "Post-processing of FactoryBean's singleton object failed", ex);
+                        }
+                        finally {
+                            afterSingletonCreation(beanName);
+                        }
+                    }
+                    if (containsSingleton(beanName)) {
+                        this.factoryBeanObjectCache.put(beanName, object);
+                    }
+                }
+            }
+            return object;
+        }
+    }
+    else {
+        Object object = doGetObjectFromFactoryBean(factory, beanName);
+        if (shouldPostProcess) {
+            try {
+                object = postProcessObjectFromFactoryBean(object, beanName);
+            }
+            catch (Throwable ex) {
+                throw new BeanCreationException(beanName, "Post-processing of FactoryBean's object failed", ex);
+            }
+        }
+        return object;
+    }
+}
+```
+
+org.springframework.beans.factory.support.FactoryBeanRegistrySupport#doGetObjectFromFactoryBean
+
+```java
+private Object doGetObjectFromFactoryBean(final FactoryBean<?> factory, final String beanName)
+      throws BeanCreationException {
+
+   Object object;
+   try {
+      if (System.getSecurityManager() != null) {
+         AccessControlContext acc = getAccessControlContext();
+         try {
+            object = AccessController.doPrivileged((PrivilegedExceptionAction<Object>) factory::getObject, acc);
+         }
+         catch (PrivilegedActionException pae) {
+            throw pae.getException();
+         }
+      }
+      else {
+         // 获取对象
+         // ex: factory → MapperFactoryBean@xxx
+         object = factory.getObject();
+      }
+   }
+   catch (FactoryBeanNotInitializedException ex) {
+      throw new BeanCurrentlyInCreationException(beanName, ex.toString());
+   }
+   catch (Throwable ex) {
+      throw new BeanCreationException(beanName, "FactoryBean threw exception on object creation", ex);
+   }
+
+   // Do not accept a null value for a FactoryBean that's not fully
+   // initialized yet: Many FactoryBeans just return null then.
+   if (object == null) {
+      if (isSingletonCurrentlyInCreation(beanName)) {
+         throw new BeanCurrentlyInCreationException(
+               beanName, "FactoryBean which is currently in creation returned null from getObject");
+      }
+      object = new NullBean();
+   }
+   // 返回代理对象
+   return object;
+}
+```
+
+调用MapperFactoryBean的getObject()获取代理对象
+
+org.mybatis.spring.mapper.MapperFactoryBean#getObject
+
+```java
+/**
+ * {@inheritDoc}
+ */
+@Override
+public T getObject() throws Exception {
+  return getSqlSession().getMapper(this.mapperInterface);
+}
+```
+
+★★★★★ 最终会调用org.apache.ibatis.session.Configuration#getMapper
+
+```java
+public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+    return mapperRegistry.getMapper(type, sqlSession);
+}
+```
+
+```java
+@SuppressWarnings("unchecked")
+public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+    // 获取knownMappers集合中获取代理工厂
+    final MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory<T>) knownMappers.get(type);
+    if (mapperProxyFactory == null) {
+        throw new BindingException("Type " + type + " is not known to the MapperRegistry.");
+    }
+    try {
+        // 创建MapperProxyFactory代理实例
+        return mapperProxyFactory.newInstance(sqlSession);
+    } catch (Exception e) {
+        throw new BindingException("Error getting mapper instance. Cause: " + e, e);
+    }
+}
+```
+
+创建MapperProxy<T>作为拦截处理，MapperProxy类实现了InvocationHandler接口，并且重写invoke方法
+
+MapperProxy类图
+
+![image-20200923182536603](.\Image\Mybatis\MapperProxy.png)
+
+```java
+@SuppressWarnings("unchecked")
+protected T newInstance(MapperProxy<T> mapperProxy) {
+  //★★★★★ 底层采用JDK动态代理， proxy.newProxyInstance()产生一个代理对象
+  return (T) Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[] { mapperInterface }, mapperProxy);
+}
+
+public T newInstance(SqlSession sqlSession) {
+  // MapperProxy做动态拦截处理
+  final MapperProxy<T> mapperProxy = new MapperProxy<>(sqlSession, mapperInterface, methodCache);
+  return newInstance(mapperProxy);
+}
+```
+
+###### **4. SqlSessionFactoryBean**的实例时在加载MapperScannerConfigurer之后，Mapper接口映射之前
+
+SqlSessionFactoryBean的初始化流程
+
+![image-20200917113740520](.\Image\Mybatis\SqlSessionFactoryBean.png)
+
+4.1 SqlSessionFactoryBean 实例化完成 → 填充属性 → 初始化操作(调用afterPropertiesSet()方法 → 自定义init())
+
+- SqlSessionFactoryBean 实现了InitializingBean接口
+
+SqlSessionFactoryBean初始化时回调afterPropertiesSet()方法，主要作用是用来构建sqlSessionFactory
+
+org.mybatis.spring.SqlSessionFactoryBean#afterPropertiesSet
+
+```java
+/**
+ * {@inheritDoc}
+ */
+@Override
+public void afterPropertiesSet() throws Exception {
+    // 验证dataSource属性不能为null
+    notNull(dataSource, "Property 'dataSource' is required");
+    // 验证sqlSessionFactoryBuilder属性不能为null
+    notNull(sqlSessionFactoryBuilder, "Property 'sqlSessionFactoryBuilder' is required");
+    state((configuration == null && configLocation == null) || !(configuration != null && configLocation != null),
+          "Property 'configuration' and 'configLocation' can not specified with together");
+
+    // ★★ 构建sqlSessionFactory
+    this.sqlSessionFactory = buildSqlSessionFactory();
+}
+```
+
+org.mybatis.spring.SqlSessionFactoryBean#buildSqlSessionFactory
+
+```java
+protected SqlSessionFactory buildSqlSessionFactory() throws Exception {
+
+    final Configuration targetConfiguration;
+
+    // XML 文件解析器
+    XMLConfigBuilder xmlConfigBuilder = null;
+    // 判断configuration属性是否为null
+    // 这里configuration、configLocation属性全部 未设置 为 null
+    if (this.configuration != null) {
+      targetConfiguration = this.configuration;
+      if (targetConfiguration.getVariables() == null) {
+        targetConfiguration.setVariables(this.configurationProperties);
+      } else if (this.configurationProperties != null) {
+        targetConfiguration.getVariables().putAll(this.configurationProperties);
+      }
+    } else if (this.configLocation != null) {
+      xmlConfigBuilder = new XMLConfigBuilder(this.configLocation.getInputStream(), null, this.configurationProperties);
+      targetConfiguration = xmlConfigBuilder.getConfiguration();
+    } else {
+      
+      // 设置默认的Configuration
+      LOGGER.debug(
+          () -> "Property 'configuration' or 'configLocation' not specified, using default MyBatis Configuration");
+      targetConfiguration = new Configuration();
+      Optional.ofNullable(this.configurationProperties).ifPresent(targetConfiguration::setVariables);
+    }
+
+    Optional.ofNullable(this.objectFactory).ifPresent(targetConfiguration::setObjectFactory);
+    Optional.ofNullable(this.objectWrapperFactory).ifPresent(targetConfiguration::setObjectWrapperFactory);
+    Optional.ofNullable(this.vfs).ifPresent(targetConfiguration::setVfsImpl);
+
+    if (hasLength(this.typeAliasesPackage)) {
+      scanClasses(this.typeAliasesPackage, this.typeAliasesSuperType).stream()
+          .filter(clazz -> !clazz.isAnonymousClass()).filter(clazz -> !clazz.isInterface())
+          .filter(clazz -> !clazz.isMemberClass()).forEach(targetConfiguration.getTypeAliasRegistry()::registerAlias);
+    }
+
+    if (!isEmpty(this.typeAliases)) {
+      Stream.of(this.typeAliases).forEach(typeAlias -> {
+        targetConfiguration.getTypeAliasRegistry().registerAlias(typeAlias);
+        LOGGER.debug(() -> "Registered type alias: '" + typeAlias + "'");
+      });
+    }
+
+    if (!isEmpty(this.plugins)) {
+      Stream.of(this.plugins).forEach(plugin -> {
+        targetConfiguration.addInterceptor(plugin);
+        LOGGER.debug(() -> "Registered plugin: '" + plugin + "'");
+      });
+    }
+
+    if (hasLength(this.typeHandlersPackage)) {
+      scanClasses(this.typeHandlersPackage, TypeHandler.class).stream().filter(clazz -> !clazz.isAnonymousClass())
+          .filter(clazz -> !clazz.isInterface()).filter(clazz -> !Modifier.isAbstract(clazz.getModifiers()))
+          .forEach(targetConfiguration.getTypeHandlerRegistry()::register);
+    }
+
+    if (!isEmpty(this.typeHandlers)) {
+      Stream.of(this.typeHandlers).forEach(typeHandler -> {
+        targetConfiguration.getTypeHandlerRegistry().register(typeHandler);
+        LOGGER.debug(() -> "Registered type handler: '" + typeHandler + "'");
+      });
+    }
+
+    targetConfiguration.setDefaultEnumTypeHandler(defaultEnumTypeHandler);
+
+    if (!isEmpty(this.scriptingLanguageDrivers)) {
+      Stream.of(this.scriptingLanguageDrivers).forEach(languageDriver -> {
+        targetConfiguration.getLanguageRegistry().register(languageDriver);
+        LOGGER.debug(() -> "Registered scripting language driver: '" + languageDriver + "'");
+      });
+    }
+    Optional.ofNullable(this.defaultScriptingLanguageDriver)
+        .ifPresent(targetConfiguration::setDefaultScriptingLanguage);
+
+    if (this.databaseIdProvider != null) {// fix #64 set databaseId before parse mapper xmls
+      try {
+        targetConfiguration.setDatabaseId(this.databaseIdProvider.getDatabaseId(this.dataSource));
+      } catch (SQLException e) {
+        throw new NestedIOException("Failed getting a databaseId", e);
+      }
+    }
+
+    Optional.ofNullable(this.cache).ifPresent(targetConfiguration::addCache);
+
+    if (xmlConfigBuilder != null) {
+      try {
+        xmlConfigBuilder.parse();
+        LOGGER.debug(() -> "Parsed configuration file: '" + this.configLocation + "'");
+      } catch (Exception ex) {
+        throw new NestedIOException("Failed to parse config resource: " + this.configLocation, ex);
+      } finally {
+        ErrorContext.instance().reset();
+      }
+    }
+
+    targetConfiguration.setEnvironment(new Environment(this.environment,
+        this.transactionFactory == null ? new SpringManagedTransactionFactory() : this.transactionFactory,
+        this.dataSource));
+
+    // 设置 映射mapper文件路径,即设置
+    // MapperLocation设置UserMapper.xml文件位置
+    // sqlSessionFactoryBean.setMapperLocations(resources);
+    if (this.mapperLocations != null) {
+      if (this.mapperLocations.length == 0) {
+        LOGGER.warn(() -> "Property 'mapperLocations' was specified but matching resources are not found.");
+      } else {
+        for (Resource mapperLocation : this.mapperLocations) {
+          if (mapperLocation == null) {
+            continue;
+          }
+          try {
+            // 创建XMLMapperBuilder对象，用于解析mapper.xml文件
+            XMLMapperBuilder xmlMapperBuilder = new XMLMapperBuilder(mapperLocation.getInputStream(),
+                targetConfiguration, mapperLocation.toString(), targetConfiguration.getSqlFragments());
+            // <1> 解析xml文件内容
+            xmlMapperBuilder.parse();
+          } catch (Exception e) {
+            throw new NestedIOException("Failed to parse mapping resource: '" + mapperLocation + "'", e);
+          } finally {
+            ErrorContext.instance().reset();
+          }
+          LOGGER.debug(() -> "Parsed mapper file: '" + mapperLocation + "'");
+        }
+      }
+    } else {
+      LOGGER.debug(() -> "Property 'mapperLocations' was not specified.");
+    }
+
+    return this.sqlSessionFactoryBuilder.build(targetConfiguration);
+  }
+```
+
+ <1> org.apache.ibatis.builder.xml.XMLMapperBuilder#parse
+
+```java
+public void parse() {
+    // 判断当前的 resource是否已经加载完成
+    if (!configuration.isResourceLoaded(resource)) {
+        // <2> 获取Mapper.xml文件中mapper节点信息，并将其内部节点转换一个对象
+        configurationElement(parser.evalNode("/mapper"));
+        // 将resource加入到已经集合中，表示当前resource文件已经加载完成
+        configuration.addLoadedResource(resource);
+		// ★★ 
+        bindMapperForNamespace();
+    }
+
+    parsePendingResultMaps();
+    parsePendingCacheRefs();
+    parsePendingStatements();
+}
+```
+
+<2> 将Mapper.xml文件中的mapper节点内容进行转换，构建Confiugration对象，该对象中包含xml文件中的一切对象信息
+
+org.apache.ibatis.builder.xml.XMLMapperBuilder#configurationElement
+
+```java
+
+private void configurationElement(XNode context) {
+    try {
+        // 获取 mapper节点中 namespace属性值
+        String namespace = context.getStringAttribute("namespace");
+        // 验证namespace 属性
+        if (namespace == null || namespace.isEmpty()) {
+            throw new BuilderException("Mapper's namespace cannot be empty");
+        }
+        
+        // 设置namespace属性，namespace不能为空 && 必须唯一
+        builderAssistant.setCurrentNamespace(namespace);
+        // 引用其它命名空间的缓存配置。
+        cacheRefElement(context.evalNode("cache-ref"));
+        // 该命名空间的缓存配置
+        cacheElement(context.evalNode("cache"));
+        // ★ 获取parameterMap节点信息，并将其加入到指定集合中
+        // <parameterMap></parameterMap> 这是 旧风格的参数映射，这种已经被废弃
+        parameterMapElement(context.evalNodes("/mapper/parameterMap"));
+        
+        // ★ 获取resultMap节点信息, 并将其加入到指定集合中
+        // <2.1> resultMap 主要用作结果映射
+        resultMapElements(context.evalNodes("/mapper/resultMap"));
+        // 获取<sql></sql>标签内容，并将其添加到集合中
+        sqlElement(context.evalNodes("/mapper/sql"));
+        // ★ <2.2> 获取<select>、<update>、<insert>、<delete>节点的内容，将其添加到集合中
+        buildStatementFromContext(context.evalNodes("select|insert|update|delete"));
+    } catch (Exception e) {
+        throw new BuilderException("Error parsing Mapper XML. The XML location is '" + resource + "'. Cause: " + e, e);
+    }
+}
+```
+
+<2.1> resultMap结果映射
+
+org.apache.ibatis.builder.xml.XMLMapperBuilder#resultMapElements
+
+```java
+// list 表示获取的所有的<resultMap>节点集合
+private void resultMapElements(List<XNode> list) {
+    for (XNode resultMapNode : list) {
+        try {
+            // 逐个节点进行解析
+            resultMapElement(resultMapNode);
+        } catch (IncompleteElementException e) {
+            // ignore, it will be retried
+        }
+    }
+}
+```
+
+```java
+private ResultMap resultMapElement(XNode resultMapNode) {
+  // 当前的resultMap节点内容、创建一个空的list对象
+  return resultMapElement(resultMapNode, Collections.emptyList(), null);
+}
+```
+
+UserDao.xml配置文件，主要用来分析resultMap的流程
+
+```xml
+<mapper namespace="com.springframework.cn.dao.UserDao">
+    <resultMap id="userResultMap" type="com.springframework.cn.entity.User">
+        <id property="id" column="id" />
+        <result property="name" column="name"/>
+        <result property="adress" column="adress"/>
+    </resultMap>
+</mapper>
+```
+
+解析<resultMap></resultMap> 节点内容，并将其内容转换为ResultMap.java 对象，加入到resultMaps集合中，key为 namespace + "." + id的形式
+
+使用到了构造器[建造者]设计模式
+
+```java
+private ResultMap resultMapElement(XNode resultMapNode, List<ResultMapping> additionalResultMappings, Class<?> enclosingType) {
+  ErrorContext.instance().activity("processing " + resultMapNode.getValueBasedIdentifier());
+    
+  // 获取resultMap节点的type属性
+  // 先获取 type → 若type不存在，则获取ofType → 若ofType不存在，则获取resultType → 若resultType不存在，则获取javaType属性
+  String type = resultMapNode.getStringAttribute("type",
+      resultMapNode.getStringAttribute("ofType",
+          resultMapNode.getStringAttribute("resultType",
+              resultMapNode.getStringAttribute("javaType"))));
+  // 获取type对应的Class类
+  // 从typeAliases[别名注册表]中获取type对应的Class
+  Class<?> typeClass = resolveClass(type);
+  if (typeClass == null) {
+    typeClass = inheritEnclosingType(resultMapNode, enclosingType);
+  }
+  
+  Discriminator discriminator = null;
+  List<ResultMapping> resultMappings = new ArrayList<>(additionalResultMappings);
+  // 获取<resultMap></resultMap>节点中所有子节点
+  List<XNode> resultChildren = resultMapNode.getChildren();
+  // 遍历所有子节点
+  for (XNode resultChild : resultChildren) {
+    // 判断子节点的的类型是否是constructor
+    if ("constructor".equals(resultChild.getName())) {
+      processConstructorElement(resultChild, typeClass, resultMappings);
+    } else if ("discriminator".equals(resultChild.getName())) {
+      // 判断子节点的的类型是否是discriminator
+      discriminator = processDiscriminatorElement(resultChild, typeClass, resultMappings);
+    } else {
+      //constructor && discriminator 之外的类型的节点
+      List<ResultFlag> flags = new ArrayList<>();
+      if ("id".equals(resultChild.getName())) {
+        // <id></id> 
+        flags.add(ResultFlag.ID);
+      }
+      // buildResultMappingFromContext(resultChild, typeClass, flags) → 构建一个ResultMapping对象
+      // 将构建的ResultMapping对象加入到集合中
+      // ★★★ ResultMapping使用的是构造器(建造者)涉及模式
+      resultMappings.add(buildResultMappingFromContext(resultChild, typeClass, flags));
+    }
+  }
+  // 获取<resultMap></resultMap>节点的id
+  String id = resultMapNode.getStringAttribute("id",
+          resultMapNode.getValueBasedIdentifier());
+  // 获取extends 属性
+  String extend = resultMapNode.getStringAttribute("extends");
+  // 获取 autoMapping属性
+  Boolean autoMapping = resultMapNode.getBooleanAttribute("autoMapping");
+  // 构建一个resultMap 解析器
+  ResultMapResolver resultMapResolver = new ResultMapResolver(builderAssistant, id, typeClass, extend, discriminator, resultMappings, autoMapping);
+  try {
+    // 返回解析结果
+    return resultMapResolver.resolve();
+  } catch (IncompleteElementException e) {
+    configuration.addIncompleteResultMap(resultMapResolver);
+    throw e;
+  }
+}
+```
+
+<2.2> 构建Statement对象即要执行的SQL语句: buildStatementFromContext
+
+org.apache.ibatis.builder.xml.XMLMapperBuilder#buildStatementFromContext(java.util.List<org.apache.ibatis.parsing.XNode>)
+
+```java
+private void buildStatementFromContext(List<XNode> list) {
+    if (configuration.getDatabaseId() != null) {
+        buildStatementFromContext(list, configuration.getDatabaseId());
+    }
+    // 构建statement对象
+    buildStatementFromContext(list, null);
+}
+```
+
+```java
+// list 表示的所有的 <insert>、<select>、<delete>、<update>节点信息
+private void buildStatementFromContext(List<XNode> list, String requiredDatabaseId) {
+    for (XNode context : list) {
+        // 创建一个xmlstatement的构造器对象
+        final XMLStatementBuilder statementParser = new XMLStatementBuilder(configuration, builderAssistant, context, requiredDatabaseId);
+        try {
+            // 转换statementnode
+            statementParser.parseStatementNode();
+        } catch (IncompleteElementException e) {
+            configuration.addIncompleteStatement(statementParser);
+        }
+    }
+}
+```
+
+```java
+public void parseStatementNode() {
+    String id = context.getStringAttribute("id");
+    String databaseId = context.getStringAttribute("databaseId");
+
+    if (!databaseIdMatchesCurrent(id, databaseId, this.requiredDatabaseId)) {
+      return;
+    }
+	
+    // 获取node名称
+    String nodeName = context.getNode().getNodeName();
+    // 获取 标签的类型，即SQL语句的类型 insert、select、update、delete
+    SqlCommandType sqlCommandType = SqlCommandType.valueOf(nodeName.toUpperCase(Locale.ENGLISH));
+    boolean isSelect = sqlCommandType == SqlCommandType.SELECT;
+    // 是否刷新缓存
+    boolean flushCache = context.getBooleanAttribute("flushCache", !isSelect);
+    // 是否使用缓存
+    boolean useCache = context.getBooleanAttribute("useCache", isSelect);
+    boolean resultOrdered = context.getBooleanAttribute("resultOrdered", false);
+
+    // Include Fragments before parsing
+    XMLIncludeTransformer includeParser = new XMLIncludeTransformer(configuration, builderAssistant);
+    includeParser.applyIncludes(context.getNode());
+
+    // 获取parameterType类型
+    String parameterType = context.getStringAttribute("parameterType");
+    // 获取parameterType对应的Class类型
+    Class<?> parameterTypeClass = resolveClass(parameterType);
+
+    String lang = context.getStringAttribute("lang");
+    LanguageDriver langDriver = getLanguageDriver(lang);
+
+    // Parse selectKey after includes and remove them.
+    processSelectKeyNodes(id, parameterTypeClass, langDriver);
+
+    // Parse the SQL (pre: <selectKey> and <include> were parsed and removed)
+    // 转换SQL , 对SQL语句进行处理
+    KeyGenerator keyGenerator;
+    // 创建一个key 格式为 id + "!selectKey"
+    String keyStatementId = id + SelectKeyGenerator.SELECT_KEY_SUFFIX;
+    keyStatementId = builderAssistant.applyCurrentNamespace(keyStatementId, true);
+    // 判断configuration中是否已经存在该 key
+    if (configuration.hasKeyGenerator(keyStatementId)) {
+      keyGenerator = configuration.getKeyGenerator(keyStatementId);
+    } else {
+      // 创建key的生成器
+      keyGenerator = context.getBooleanAttribute("useGeneratedKeys",
+          configuration.isUseGeneratedKeys() && SqlCommandType.INSERT.equals(sqlCommandType))
+          ? Jdbc3KeyGenerator.INSTANCE : NoKeyGenerator.INSTANCE;
+    }
+	
+    /**
+     * ★★★ 解析select|insert|update|delete节点中SQL语句内容,
+     * 使用#{xxx}时， Mybatis会创建PreparedStatement 参数占位符， 即#{xxx} → ?;
+     * ex: select * from user where id = #{id} → select * from user where id = ?;
+     * 这样做得好处不存在 SQL注入
+     * ${} 是直接插入一个字符串，该字符串是不会进行转义的，存在SQL注入的问题
+     */
+    SqlSource sqlSource = langDriver.createSqlSource(configuration, context, parameterTypeClass);
+
+    // ☆ 设置statementType 类型，默认使用的是 [prepared]表示创建的是PreparedStatement，该statement会进行预编译
+    StatementType statementType = StatementType.valueOf(context.getStringAttribute("statementType", StatementType.PREPARED.toString()));
+    
+    // 获取参数值
+    Integer fetchSize = context.getIntAttribute("fetchSize");
+    Integer timeout = context.getIntAttribute("timeout");
+    String parameterMap = context.getStringAttribute("parameterMap");
+    String resultType = context.getStringAttribute("resultType");
+    Class<?> resultTypeClass = resolveClass(resultType);
+    String resultMap = context.getStringAttribute("resultMap");
+    String resultSetType = context.getStringAttribute("resultSetType");
+    ResultSetType resultSetTypeEnum = resolveResultSetType(resultSetType);
+    if (resultSetTypeEnum == null) {
+      resultSetTypeEnum = configuration.getDefaultResultSetType();
+    }
+    String keyProperty = context.getStringAttribute("keyProperty");
+    String keyColumn = context.getStringAttribute("keyColumn");
+    String resultSets = context.getStringAttribute("resultSets");
+
+    // 构建MappedStatement对象，并将其加入到指定集合中
+    builderAssistant.addMappedStatement(id, sqlSource, statementType, sqlCommandType,
+        fetchSize, timeout, parameterMap, parameterTypeClass, resultMap, resultTypeClass,
+        resultSetTypeEnum, flushCache, useCache, resultOrdered,
+        keyGenerator, keyProperty, keyColumn, databaseId, langDriver, resultSets);
+  }
+```
+
+org.apache.ibatis.builder.MapperBuilderAssistant#addMappedStatement()
+
+```java
+public MappedStatement addMappedStatement(
+    String id,
+    SqlSource sqlSource,
+    StatementType statementType,
+    SqlCommandType sqlCommandType,
+    Integer fetchSize,
+    Integer timeout,
+    String parameterMap,
+    Class<?> parameterType,
+    String resultMap,
+    Class<?> resultType,
+    ResultSetType resultSetType,
+    boolean flushCache,
+    boolean useCache,
+    boolean resultOrdered,
+    KeyGenerator keyGenerator,
+    String keyProperty,
+    String keyColumn,
+    String databaseId,
+    LanguageDriver lang,
+    String resultSets) {
+
+  if (unresolvedCacheRef) {
+    throw new IncompleteElementException("Cache-ref not yet resolved");
+  }
+
+  // Map集合中的key: 格式为 namespace + id
+  id = applyCurrentNamespace(id, false);
+  // 判断是否是select语句
+  boolean isSelect = sqlCommandType == SqlCommandType.SELECT;
+
+  MappedStatement.Builder statementBuilder = new MappedStatement.Builder(configuration, id, sqlSource, sqlCommandType)
+      .resource(resource)
+      .fetchSize(fetchSize)
+      .timeout(timeout)
+      .statementType(statementType)
+      .keyGenerator(keyGenerator)
+      .keyProperty(keyProperty)
+      .keyColumn(keyColumn)
+      .databaseId(databaseId)
+      .lang(lang)
+      .resultOrdered(resultOrdered)
+      .resultSets(resultSets)
+      .resultMaps(getStatementResultMaps(resultMap, resultType, id))
+      .resultSetType(resultSetType)
+      .flushCacheRequired(valueOrDefault(flushCache, !isSelect))
+      .useCache(valueOrDefault(useCache, isSelect))
+      .cache(currentCache);
+
+  // parameterMap 已经被废弃
+  ParameterMap statementParameterMap = getStatementParameterMap(parameterMap, parameterType, id);
+  if (statementParameterMap != null) {
+    statementBuilder.parameterMap(statementParameterMap);
+  }
+
+  // 构造MapperStatement对象
+  MappedStatement statement = statementBuilder.build();
+  // 将该对象加入到mappedStatements集合中
+  configuration.addMappedStatement(statement);
+  return statement;
+}
+```
+
+★★★ Configuration类
+
+Configuration类 是一个核心类，主要用来存储Mapper.xml文件的解析结果
+
+```java
+public class Configuration {
+
+  protected Environment environment;
+
+  protected boolean safeRowBoundsEnabled;
+  protected boolean safeResultHandlerEnabled = true;
+  protected boolean mapUnderscoreToCamelCase;
+  protected boolean aggressiveLazyLoading;
+  protected boolean multipleResultSetsEnabled = true;
+  protected boolean useGeneratedKeys;
+  protected boolean useColumnLabel = true;
+  protected boolean cacheEnabled = true;
+  protected boolean callSettersOnNulls;
+  protected boolean useActualParamName = true;
+  protected boolean returnInstanceForEmptyRow;
+  protected boolean shrinkWhitespacesInSql;
+
+  protected String logPrefix;
+  protected Class<? extends Log> logImpl;
+  protected Class<? extends VFS> vfsImpl;
+  protected LocalCacheScope localCacheScope = LocalCacheScope.SESSION;
+  protected JdbcType jdbcTypeForNull = JdbcType.OTHER;
+  protected Set<String> lazyLoadTriggerMethods = new HashSet<>(Arrays.asList("equals", "clone", "hashCode", "toString"));
+  protected Integer defaultStatementTimeout;
+  protected Integer defaultFetchSize;
+  protected ResultSetType defaultResultSetType;
+  protected ExecutorType defaultExecutorType = ExecutorType.SIMPLE;
+  protected AutoMappingBehavior autoMappingBehavior = AutoMappingBehavior.PARTIAL;
+  protected AutoMappingUnknownColumnBehavior autoMappingUnknownColumnBehavior = AutoMappingUnknownColumnBehavior.NONE;
+
+  protected Properties variables = new Properties();
+  protected ReflectorFactory reflectorFactory = new DefaultReflectorFactory();
+  protected ObjectFactory objectFactory = new DefaultObjectFactory();
+  protected ObjectWrapperFactory objectWrapperFactory = new DefaultObjectWrapperFactory();
+
+  protected boolean lazyLoadingEnabled = false;
+  protected ProxyFactory proxyFactory = new JavassistProxyFactory(); // #224 Using internal Javassist instead of OGNL
+
+  protected String databaseId;
+  /**
+   * Configuration factory class.
+   * Used to create Configuration for loading deserialized unread properties.
+   *
+   * @see <a href='https://code.google.com/p/mybatis/issues/detail?id=300'>Issue 300 (google code)</a>
+   */
+  protected Class<?> configurationFactory;
+
+  protected final MapperRegistry mapperRegistry = new MapperRegistry(this);
+  protected final InterceptorChain interceptorChain = new InterceptorChain();
+  protected final TypeHandlerRegistry typeHandlerRegistry = new TypeHandlerRegistry(this);
+  protected final TypeAliasRegistry typeAliasRegistry = new TypeAliasRegistry();
+  protected final LanguageDriverRegistry languageRegistry = new LanguageDriverRegistry();
+
+  protected final Map<String, MappedStatement> mappedStatements = new StrictMap<MappedStatement>("Mapped Statements collection")
+      .conflictMessageProducer((savedValue, targetValue) ->
+          ". please check " + savedValue.getResource() + " and " + targetValue.getResource());
+  protected final Map<String, Cache> caches = new StrictMap<>("Caches collection");
+  protected final Map<String, ResultMap> resultMaps = new StrictMap<>("Result Maps collection");
+  protected final Map<String, ParameterMap> parameterMaps = new StrictMap<>("Parameter Maps collection");
+  protected final Map<String, KeyGenerator> keyGenerators = new StrictMap<>("Key Generators collection");
+
+  protected final Set<String> loadedResources = new HashSet<>();
+  protected final Map<String, XNode> sqlFragments = new StrictMap<>("XML fragments parsed from previous mappers");
+
+  protected final Collection<XMLStatementBuilder> incompleteStatements = new LinkedList<>();
+  protected final Collection<CacheRefResolver> incompleteCacheRefs = new LinkedList<>();
+  protected final Collection<ResultMapResolver> incompleteResultMaps = new LinkedList<>();
+  protected final Collection<MethodResolver> incompleteMethods = new LinkedList<>();
+
+  /*
+   * A map holds cache-ref relationship. The key is the namespace that
+   * references a cache bound to another namespace and the value is the
+   * namespace which the actual cache is bound to.
+   */
+  protected final Map<String, String> cacheRefMap = new HashMap<>();
 }
 ```
 

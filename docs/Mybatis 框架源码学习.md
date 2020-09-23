@@ -1212,11 +1212,13 @@ protected SqlSessionFactory buildSqlSessionFactory() throws Exception {
 public void parse() {
     // 判断当前的 resource是否已经加载完成
     if (!configuration.isResourceLoaded(resource)) {
-        // <2> 获取Mapper.xml文件中mapper节点信息，并将其内部节点转换一个对象
+        // ★★ <2> 获取Mapper.xml文件中mapper节点信息，并将其内部节点转换一个对象
+        // 这里只解析Mapper.xml文件中节点信息，不会解析Dao.java中方法注解上的SQL信息
         configurationElement(parser.evalNode("/mapper"));
         // 将resource加入到已经集合中，表示当前resource文件已经加载完成
         configuration.addLoadedResource(resource);
-		// ★★ 
+		// ★★ <3> 用于解析Mapper.xml 文件中mapper节点信息和Dao.java 中方法注解上的SQL信息
+        // 绑定Mapper接口到namespace
         bindMapperForNamespace();
     }
 
@@ -1632,3 +1634,218 @@ public class Configuration {
 }
 ```
 
+<3> bindMapperForNamespace() 绑定Mapper接口
+
+- 用于解析Mapper.xml 文件中mapper节点信息
+
+- 解析Dao.java 中方法上注解的SQL信息
+
+```java
+private void bindMapperForNamespace() {
+    // 获取namespace
+    String namespace = builderAssistant.getCurrentNamespace();
+    if (namespace != null) {
+        Class<?> boundType = null;
+        try {
+            // 通过namespace获取对应的类
+            boundType = Resources.classForName(namespace);
+        } catch (ClassNotFoundException e) {
+            //ignore, bound type is not required
+        }
+        if (boundType != null) {
+            // 判断knownMappers集合中是否已经包含boundType，如果包含表示已经解析过了
+            // 并且已经创建了 boundType（Class）对应的 MapperProxyFactory
+            if (!configuration.hasMapper(boundType)) {
+                // Spring may not know the real resource name so we set a flag
+                // to prevent loading again this resource from the mapper interface
+                // look at MapperAnnotationBuilder#loadXmlResource
+                // 将namespace: + namespace 加入到loadResource集合中，表示这个资源已经加载过
+                configuration.addLoadedResource("namespace:" + namespace);
+                
+                // 解析Mapper.xml文件内容和Dao.java中接口上的注解信息，添加映射
+                configuration.addMapper(boundType);
+            }
+        }
+    }
+}
+```
+
+org.apache.ibatis.session.Configuration#addMapper
+
+```java
+public <T> void addMapper(Class<T> type) {
+    mapperRegistry.addMapper(type);
+}
+```
+
+org.apache.ibatis.binding.MapperRegistry#addMapper
+
+```java
+  public <T> void addMapper(Class<T> type) {
+    // 判断当前type 是否是 接口
+    if (type.isInterface()) {
+      // 如果已经存在映射，即knownMappers集合中是否包含指定的key
+      if (hasMapper(type)) {
+        throw new BindingException("Type " + type + " is already known to the MapperRegistry.");
+      }
+      boolean loadCompleted = false;
+      try {
+        // 将key,value → type,MapperProxyFactoty 加入到集合中，MapperProxyFactory<T> 主要用于生成一个MapperFactoryBean的代理对象
+        knownMappers.put(type, new MapperProxyFactory<T>(type));
+        // It's important that the type is added before the parser is run
+        // otherwise the binding may automatically be attempted by the
+        // mapper parser. If the type is already known, it won't try.
+          
+        // 创建一个MapperAnnotationBuilder
+        MapperAnnotationBuilder parser = new MapperAnnotationBuilder(config, type);
+        // ★★★ 就行解析操作
+        parser.parse();
+        loadCompleted = true;
+      } finally {
+        if (!loadCompleted) {
+          knownMappers.remove(type);
+        }
+      }
+    }
+  }
+```
+
+org.apache.ibatis.builder.annotation.MapperAnnotationBuilder#parse
+
+```java
+public void parse() {
+  String resource = type.toString();
+  // 判断resource是否已经加载
+  // ex: resource → com.springframework.cn.Dao.userDao
+  if (!configuration.isResourceLoaded(resource)) {
+    // 加载Mapper.xml文件信息，前面已经解析过xml文件信息，故这里不再进行解析
+    loadXmlResource();
+    // 设置当前Resource已经加载过
+    configuration.addLoadedResource(resource);
+    assistant.setCurrentNamespace(type.getName());
+    parseCache();
+    parseCacheRef();
+    // 获取当前的Mapper接口的方法
+    Method[] methods = type.getMethods();
+    // 遍历方法
+    for (Method method : methods) {
+      try {
+        // issue #237
+        if (!method.isBridge()) {
+          // 获取方法上的Statement，并将其加入到指定集合中
+          parseStatement(method);
+        }
+      } catch (IncompleteElementException e) {
+        configuration.addIncompleteMethod(new MethodResolver(this, method));
+      }
+    }
+  }
+  parsePendingMethods();
+}
+```
+
+org.apache.ibatis.builder.annotation.MapperAnnotationBuilder#parseStatement
+
+解析方法注解上的SQL信息
+
+```java
+void parseStatement(Method method) {
+  // 获取方法上面的参数类型
+  Class<?> parameterTypeClass = getParameterType(method);
+  LanguageDriver languageDriver = getLanguageDriver(method);
+  // 获取方法注解上面的SQL信息,这个是已经使用占位符替换之后的
+  // ex: 结果 select * from user where id = ?;
+  SqlSource sqlSource = getSqlSourceFromAnnotations(method, parameterTypeClass, languageDriver);
+  if (sqlSource != null) {
+    Options options = method.getAnnotation(Options.class);
+    // statementid: 全类名 + . + 方法名
+    final String mappedStatementId = type.getName() + "." + method.getName();
+    // 剩下的为设置参数
+    Integer fetchSize = null;
+    Integer timeout = null;
+    StatementType statementType = StatementType.PREPARED;
+    ResultSetType resultSetType = ResultSetType.FORWARD_ONLY;
+    SqlCommandType sqlCommandType = getSqlCommandType(method);
+    boolean isSelect = sqlCommandType == SqlCommandType.SELECT;
+    boolean flushCache = !isSelect;
+    boolean useCache = isSelect;
+
+    KeyGenerator keyGenerator;
+    String keyProperty = "id";
+    String keyColumn = null;
+    if (SqlCommandType.INSERT.equals(sqlCommandType) || SqlCommandType.UPDATE.equals(sqlCommandType)) {
+      // first check for SelectKey annotation - that overrides everything else
+      SelectKey selectKey = method.getAnnotation(SelectKey.class);
+      if (selectKey != null) {
+        keyGenerator = handleSelectKeyAnnotation(selectKey, mappedStatementId, getParameterType(method), languageDriver);
+        keyProperty = selectKey.keyProperty();
+      } else if (options == null) {
+        keyGenerator = configuration.isUseGeneratedKeys() ? Jdbc3KeyGenerator.INSTANCE : NoKeyGenerator.INSTANCE;
+      } else {
+        keyGenerator = options.useGeneratedKeys() ? Jdbc3KeyGenerator.INSTANCE : NoKeyGenerator.INSTANCE;
+        keyProperty = options.keyProperty();
+        keyColumn = options.keyColumn();
+      }
+    } else {
+      keyGenerator = NoKeyGenerator.INSTANCE;
+    }
+
+    if (options != null) {
+      if (FlushCachePolicy.TRUE.equals(options.flushCache())) {
+        flushCache = true;
+      } else if (FlushCachePolicy.FALSE.equals(options.flushCache())) {
+        flushCache = false;
+      }
+      useCache = options.useCache();
+      fetchSize = options.fetchSize() > -1 || options.fetchSize() == Integer.MIN_VALUE ? options.fetchSize() : null; //issue #348
+      timeout = options.timeout() > -1 ? options.timeout() : null;
+      statementType = options.statementType();
+      resultSetType = options.resultSetType();
+    }
+
+    String resultMapId = null;
+    ResultMap resultMapAnnotation = method.getAnnotation(ResultMap.class);
+    if (resultMapAnnotation != null) {
+      String[] resultMaps = resultMapAnnotation.value();
+      StringBuilder sb = new StringBuilder();
+      for (String resultMap : resultMaps) {
+        if (sb.length() > 0) {
+          sb.append(",");
+        }
+        sb.append(resultMap);
+      }
+      resultMapId = sb.toString();
+    } else if (isSelect) {
+      resultMapId = parseResultMap(method);
+    }
+    
+    // ★★ 构造MappedStatement，并将其加入到mappedStatements集合中
+    // 到此所有的Mapper节点信息全部解析完成
+    assistant.addMappedStatement(
+        mappedStatementId,
+        sqlSource,
+        statementType,
+        sqlCommandType,
+        fetchSize,
+        timeout,
+        // ParameterMapID
+        null,
+        parameterTypeClass,
+        resultMapId,
+        getReturnType(method),
+        resultSetType,
+        flushCache,
+        useCache,
+        // TODO gcode issue #577
+        false,
+        keyGenerator,
+        keyProperty,
+        keyColumn,
+        // DatabaseID
+        null,
+        languageDriver,
+        // ResultSets
+        options != null ? nullOrEmpty(options.resultSets()) : null);
+  }
+}
+```

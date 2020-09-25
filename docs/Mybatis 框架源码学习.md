@@ -1849,3 +1849,478 @@ void parseStatement(Method method) {
   }
 }
 ```
+
+### 4. Mapper接口调用时的动态代理拦截处理分析
+
+###### 4.1 MapperProxy 类图分析
+
+![image-20200923182536603](.\Image\Mybatis\MapperProxy.png)
+
+MapperProxy实现了InvocationHandler接口，Service层调用Dao层时，会触发代理对象的invoke()方法进行拦截处理
+
+ex:
+
+```java
+// 这里dao的类型是一个MapperFactoryBean的代理对象，代理方法处理类是MapperProxy
+@Autowired
+private UserDao dao;
+
+@Override
+public User login(int id) {
+    
+    // 触发动态代理对象的方法处理,即MapperProxy#invoke()
+    return dao.login(id);
+}
+```
+
+org.apache.ibatis.binding.MapperProxy#invoke
+
+```java
+@Override
+public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    try {
+        // 判断当前方法的类 是否是 Object
+        if (Object.class.equals(method.getDeclaringClass())) {
+            return method.invoke(this, args);
+        } else {
+            // 从缓存中获取methodInvoker，若缓存中没有，则new
+            // 调用invoke()进行方法拦截处理
+            return cachedInvoker(method).invoke(proxy, method, args, sqlSession);
+        }
+    } catch (Throwable t) {
+        throw ExceptionUtil.unwrapThrowable(t);
+    }
+}
+```
+
+org.apache.ibatis.binding.MapperProxy.PlainMethodInvoker#invoke
+
+```java
+@Override
+public Object invoke(Object proxy, Method method, Object[] args, SqlSession sqlSession) throws Throwable {
+  // 方法拦截处理执行
+  return mapperMethod.execute(sqlSession, args);
+}
+```
+
+org.apache.ibatis.binding.MapperMethod#execute
+
+```java
+public Object execute(SqlSession sqlSession, Object[] args) {
+    Object result;
+    // 根据执行SQL语句的类型，判断是insert、select、update、delete
+    switch (command.getType()) {
+        case INSERT: {
+            // 插入
+            Object param = method.convertArgsToSqlCommandParam(args);
+            result = rowCountResult(sqlSession.insert(command.getName(), param));
+            break;
+        }
+        case UPDATE: {
+            Object param = method.convertArgsToSqlCommandParam(args);
+            result = rowCountResult(sqlSession.update(command.getName(), param));
+            break;
+        }
+        case DELETE: {
+            Object param = method.convertArgsToSqlCommandParam(args);
+            result = rowCountResult(sqlSession.delete(command.getName(), param));
+            break;
+        }
+        case SELECT:
+            // 根据方法返回值类型，判断调用具体的方法
+            // 返回值类型为void 或者 method方法中有ResultHanlder
+            // ResultHandler 表示需要自己进行处理返回结果
+            if (method.returnsVoid() && method.hasResultHandler()) {
+                executeWithResultHandler(sqlSession, args);
+                result = null;
+            } else if (method.returnsMany()) {
+                // 返回类型为List，ex: List
+                result = executeForMany(sqlSession, args);
+            } else if (method.returnsMap()) {
+                // 返回类型为Map
+                result = executeForMap(sqlSession, args);
+            } else if (method.returnsCursor()) {
+                // 返回值类型为 Cursor
+                result = executeForCursor(sqlSession, args);
+            } else {
+                // 否则，返回单个对象
+
+                // 转换args中的参数，用于替换SQL语句中的参数
+                Object param = method.convertArgsToSqlCommandParam(args);
+                // ★★★ 因为这里返回的是单个对象，所以调用的是selectone
+                result = sqlSession.selectOne(command.getName(), param);
+                // 这里返回的result对象，此时是已经被处理过的对象
+                if (method.returnsOptional()
+                    && (result == null || !method.getReturnType().equals(result.getClass()))) {
+                    result = Optional.ofNullable(result);
+                }
+            }
+            break;
+        case FLUSH:
+            result = sqlSession.flushStatements();
+            break;
+        default:
+            throw new BindingException("Unknown execution method for: " + command.getName());
+    }
+    if (result == null && method.getReturnType().isPrimitive() && !method.returnsVoid()) {
+        throw new BindingException("Mapper method '" + command.getName()
+                                   + " attempted to return null from a method with a primitive return type (" + method.getReturnType() + ").");
+    }
+    return result;
+}
+```
+
+org.mybatis.spring.SqlSessionTemplate#selectOne(java.lang.String, java.lang.Object)
+
+```java
+/**
+ * {@inheritDoc}
+ */
+@Override
+public <T> T selectOne(String statement, Object parameter) {
+  // 这里调用sqlSession，是通过sqlSessionFactory产生的一个sqlSession的代理对象
+  return this.sqlSessionProxy.selectOne(statement, parameter);
+}
+```
+
+同样，因为sqlSessionProxy是一个JDK动态代理对象，调用selectOne时，同样会调用其拦截器的invoke(),进行拦截处理
+
+org.mybatis.spring.SqlSessionTemplate.SqlSessionInterceptor
+
+```java
+private class SqlSessionInterceptor implements InvocationHandler {
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        
+        // 获取sqlSession
+        SqlSession sqlSession = getSqlSession(SqlSessionTemplate.this.sqlSessionFactory,
+                                              SqlSessionTemplate.this.executorType, SqlSessionTemplate.this.exceptionTranslator);
+        try {
+            // 委托对象，进行方法的调用，获取其返回值
+            Object result = method.invoke(sqlSession, args);
+            // 判断是否需要提交事务
+            if (!isSqlSessionTransactional(sqlSession, SqlSessionTemplate.this.sqlSessionFactory)) {
+                // force commit even on non-dirty sessions because some databases require
+                // a commit/rollback before calling close()
+                // 提交事务
+                sqlSession.commit(true);
+            }
+            return result;
+        } catch (Throwable t) {
+            // 异常处理
+            Throwable unwrapped = unwrapThrowable(t);
+            if (SqlSessionTemplate.this.exceptionTranslator != null && unwrapped instanceof PersistenceException) {
+                // release the connection to avoid a deadlock if the translator is no loaded. See issue #22
+                closeSqlSession(sqlSession, SqlSessionTemplate.this.sqlSessionFactory);
+                sqlSession = null;
+                Throwable translated = SqlSessionTemplate.this.exceptionTranslator
+                    .translateExceptionIfPossible((PersistenceException) unwrapped);
+                if (translated != null) {
+                    unwrapped = translated;
+                }
+            }
+            throw unwrapped;
+        } finally {
+            if (sqlSession != null) {
+                // 关闭sqlSession连接
+                closeSqlSession(sqlSession, SqlSessionTemplate.this.sqlSessionFactory);
+            }
+        }
+    }
+}
+
+```
+
+委托对象，进行方法调用，最终会调用DefaultSqlSession.selectOne()方法
+
+org.apache.ibatis.session.defaults.DefaultSqlSession#selectOne(java.lang.String, java.lang.Object)
+
+```java
+@Override
+public <T> T selectOne(String statement, Object parameter) {
+
+    // ★★★ 调用selectList进行查询结果
+    List<T> list = this.selectList(statement, parameter);
+    // 返回结果size为1，则正常，否则抛出异常
+    if (list.size() == 1) {
+        return list.get(0);
+    } else if (list.size() > 1) {
+        throw new TooManyResultsException("Expected one result (or null) to be returned by selectOne(), but found: " + list.size());
+    } else {
+        return null;
+    }
+}
+```
+
+```java
+@Override
+public <E> List<E> selectList(String statement, Object parameter) {
+  return this.selectList(statement, parameter, RowBounds.DEFAULT);
+}
+```
+
+```java
+@Override
+public <E> List<E> selectList(String statement, Object parameter, RowBounds rowBounds) {
+  try {
+    // 从MappedStatement集合中获取指定的MappedStatement
+    // statement ex: 此处的statement: namespace + id
+    MappedStatement ms = configuration.getMappedStatement(statement);
+    // 调用query方法
+    return executor.query(ms, wrapCollection(parameter), rowBounds, Executor.NO_RESULT_HANDLER);
+  } catch (Exception e) {
+    throw ExceptionFactory.wrapException("Error querying database.  Cause: " + e, e);
+  } finally {
+    ErrorContext.instance().reset();
+  }
+}
+```
+
+org.apache.ibatis.executor.CachingExecutor#query(org.apache.ibatis.mapping.MappedStatement, java.lang.Object, org.apache.ibatis.session.RowBounds, org.apache.ibatis.session.ResultHandler)
+
+```java
+@Override
+public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+    BoundSql boundSql = ms.getBoundSql(parameterObject);
+    // 创建一个缓存的key，用于再次查询时使用
+    CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql);
+    return query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+}
+```
+
+```java
+@Override
+public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql)
+    throws SQLException {
+    // 获取缓存，第一次缓存为null
+    Cache cache = ms.getCache();
+    if (cache != null) {
+        flushCacheIfRequired(ms);
+        if (ms.isUseCache() && resultHandler == null) {
+            ensureNoOutParams(ms, boundSql);
+            @SuppressWarnings("unchecked")
+            List<E> list = (List<E>) tcm.getObject(cache, key);
+            if (list == null) {
+                list = delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+                tcm.putObject(cache, key, list); // issue #578 and #116
+            }
+            return list;
+        }
+    }
+    // 直接委托delegate，进行query查询
+    return delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+}
+```
+
+org.apache.ibatis.executor.BaseExecutor#query()
+
+```java
+@SuppressWarnings("unchecked")
+@Override
+public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+    ErrorContext.instance().resource(ms.getResource()).activity("executing a query").object(ms.getId());
+    if (closed) {
+        throw new ExecutorException("Executor was closed.");
+    }
+    if (queryStack == 0 && ms.isFlushCacheRequired()) {
+        clearLocalCache();
+    }
+    List<E> list;
+    try {
+        queryStack++;
+        
+        // 上面已经设置过resultHandler=Executor.NO_RESULT_HANDLER, 为null； 
+        // 优先从缓存中去获取结果，若获取结果为null，则进行查询数据库操作
+        list = resultHandler == null ? (List<E>) localCache.getObject(key) : null;
+        if (list != null) {
+            // 处理从缓存中获取的结果
+            handleLocallyCachedOutputParameters(ms, key, parameter, boundSql);
+        } else {
+            // ★★ 查询数据库
+            list = queryFromDatabase(ms, parameter, rowBounds, resultHandler, key, boundSql);
+        }
+    } finally {
+        queryStack--;
+    }
+    if (queryStack == 0) {
+        for (DeferredLoad deferredLoad : deferredLoads) {
+            deferredLoad.load();
+        }
+        // issue #601
+        deferredLoads.clear();
+        if (configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT) {
+            // issue #482
+            clearLocalCache();
+        }
+    }
+    return list;
+}
+```
+
+委托BaseExecuter进行查询数据库
+
+```java
+private <E> List<E> queryFromDatabase(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql) throws SQLException {
+    List<E> list;
+    // 缓存一个key
+    localCache.putObject(key, EXECUTION_PLACEHOLDER);
+    try {
+        // 调用doQuery进行查询
+        list = doQuery(ms, parameter, rowBounds, resultHandler, boundSql);
+    } finally {
+        localCache.removeObject(key);
+    }
+    // 将查询结果进行缓存，方便进行下次获取
+    localCache.putObject(key, list);
+    if (ms.getStatementType() == StatementType.CALLABLE) {
+        localOutputParameterCache.putObject(key, parameter);
+    }
+    return list;
+}
+```
+
+调用doQuery() 方法进行查询
+
+org.apache.ibatis.executor.SimpleExecutor#doQuery
+
+```java
+@Override
+public <E> List<E> doQuery(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+    Statement stmt = null;
+    try {
+        Configuration configuration = ms.getConfiguration();
+        // 获取statement的处理器
+        StatementHandler handler = configuration.newStatementHandler(wrapper, ms, parameter, rowBounds, resultHandler, boundSql);
+        // ★★★ 
+        stmt = prepareStatement(handler, ms.getStatementLog());
+        // 委托handler进行Query查询数据库
+        return handler.query(stmt, resultHandler);
+    } finally {
+        closeStatement(stmt);
+    }
+}
+```
+
+org.apache.ibatis.executor.SimpleExecutor#prepareStatement
+
+对SQL语句进行预处理，将SQL语句中的？等进行参数化，变为一条可以真正在数据库中执行的SQl语句
+
+ex: select * from user where id = ?;  → select * from user where id = 2;
+
+```java
+private Statement prepareStatement(StatementHandler handler, Log statementLog) throws SQLException {
+    Statement stmt;
+    // 获取一个connection连接
+    Connection connection = getConnection(statementLog);
+    stmt = handler.prepare(connection, transaction.getTimeout());
+    // ★★★ SQL语句参数化
+    handler.parameterize(stmt);
+    return stmt;
+}
+```
+
+委托PreparedStatementHandler进行query查询
+
+org.apache.ibatis.executor.statement.PreparedStatementHandler#query
+
+```java
+@Override
+public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+    // statement强制转换为PrepareStatement
+    PreparedStatement ps = (PreparedStatement) statement;
+    // 调用execute
+    ps.execute();
+    return resultSetHandler.handleResultSets(ps);
+}
+```
+
+底层是调用JDBC来实现的
+
+com.mysql.cj.jdbc.PreparedStatement#execute
+
+```java
+public boolean execute() throws SQLException {
+    synchronized (checkClosed().getConnectionMutex()) {
+		// 设置Jdbc连接
+        JdbcConnection locallyScopedConn = this.connection;
+
+        if (!checkReadOnlySafeStatement()) {
+            throw SQLError.createSQLException(Messages.getString("PreparedStatement.20") + Messages.getString("PreparedStatement.21"),
+                    SQLError.SQL_STATE_ILLEGAL_ARGUMENT, getExceptionInterceptor());
+        }
+
+        ResultSetInternalMethods rs = null;
+
+        CachedResultSetMetaData cachedMetadata = null;
+
+        this.lastQueryIsOnDupKeyUpdate = false;
+
+        if (this.retrieveGeneratedKeys) {
+            this.lastQueryIsOnDupKeyUpdate = containsOnDuplicateKeyUpdateInSQL();
+        }
+
+        clearWarnings();
+
+        setupStreamingTimeout(locallyScopedConn);
+
+        this.batchedGeneratedKeys = null;
+
+        PacketPayload sendPacket = fillSendPacket();
+
+        String oldCatalog = null;
+
+        if (!locallyScopedConn.getCatalog().equals(this.getCurrentCatalog())) {
+            oldCatalog = locallyScopedConn.getCatalog();
+            locallyScopedConn.setCatalog(this.getCurrentCatalog());
+        }
+
+        //
+        // Check if we have cached metadata for this query...
+        //
+        boolean cacheResultSetMetadata = locallyScopedConn.getPropertySet().getBooleanReadableProperty(PropertyDefinitions.PNAME_cacheResultSetMetadata)
+                .getValue();
+        if (cacheResultSetMetadata) {
+            cachedMetadata = locallyScopedConn.getCachedMetaData(this.originalSql);
+        }
+
+        boolean oldInfoMsgState = false;
+
+        if (this.retrieveGeneratedKeys) {
+            oldInfoMsgState = locallyScopedConn.isReadInfoMsgEnabled();
+            locallyScopedConn.setReadInfoMsgEnabled(true);
+        }
+
+        //
+        // Only apply max_rows to selects
+        //
+        locallyScopedConn.setSessionMaxRows(this.firstCharOfStmt == 'S' ? this.maxRows : -1);
+
+        rs = executeInternal(this.maxRows, sendPacket, createStreamingResultSet(), (this.firstCharOfStmt == 'S'), cachedMetadata, false);
+
+        if (cachedMetadata != null) {
+            locallyScopedConn.initializeResultsMetadataFromCache(this.originalSql, cachedMetadata, rs);
+        } else {
+            if (rs.hasRows() && cacheResultSetMetadata) {
+                locallyScopedConn.initializeResultsMetadataFromCache(this.originalSql, null /* will be created */, rs);
+            }
+        }
+
+        if (this.retrieveGeneratedKeys) {
+            locallyScopedConn.setReadInfoMsgEnabled(oldInfoMsgState);
+            rs.setFirstCharOfQuery(this.firstCharOfStmt);
+        }
+
+        if (oldCatalog != null) {
+            locallyScopedConn.setCatalog(oldCatalog);
+        }
+
+        if (rs != null) {
+            this.lastInsertId = rs.getUpdateID();
+
+            this.results = rs;
+        }
+
+        return ((rs != null) && rs.hasRows());
+    }
+}
+```

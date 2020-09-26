@@ -1,5 +1,9 @@
 # Mybatis 框架源码学习
 
+Mybatis流程图
+
+![Mybatis流程图](./Image/Mybatis/MybatisHandlerProcess.png)
+
 ### 1. 创建Mybatis配置文件信息
 
 ```java
@@ -1873,6 +1877,8 @@ public User login(int id) {
 }
 ```
 
+###### 4.2 MapperProxy#invoke()处理分析
+
 org.apache.ibatis.binding.MapperProxy#invoke
 
 ```java
@@ -2226,101 +2232,226 @@ org.apache.ibatis.executor.statement.PreparedStatementHandler#query
 ```java
 @Override
 public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+    // 这些全部是通过JDBC实现
     // statement强制转换为PrepareStatement
     PreparedStatement ps = (PreparedStatement) statement;
     // 调用execute
     ps.execute();
+    // ★★★ 处理返回结果
     return resultSetHandler.handleResultSets(ps);
 }
 ```
 
-底层是调用JDBC来实现的
+org.apache.ibatis.executor.resultset.DefaultResultSetHandler#handleResultSets
 
-com.mysql.cj.jdbc.PreparedStatement#execute
+处理JDBC Preparestatement的执行结果，将结果映射为指定类型
 
 ```java
-public boolean execute() throws SQLException {
-    synchronized (checkClosed().getConnectionMutex()) {
-		// 设置Jdbc连接
-        JdbcConnection locallyScopedConn = this.connection;
+@Override
+public List<Object> handleResultSets(Statement stmt) throws SQLException {
+    ErrorContext.instance().activity("handling results").object(mappedStatement.getId());
 
-        if (!checkReadOnlySafeStatement()) {
-            throw SQLError.createSQLException(Messages.getString("PreparedStatement.20") + Messages.getString("PreparedStatement.21"),
-                    SQLError.SQL_STATE_ILLEGAL_ARGUMENT, getExceptionInterceptor());
+    final List<Object> multipleResults = new ArrayList<Object>();
+
+    int resultSetCount = 0;
+    // 获取ResultSet，并将其进行封装为ResultSetWrapper对象返回
+    
+    // 创建ResultSetWrapper对象过程中会创建 设置存储返回值类型的字段、字段类型、JDBC类型
+    // ex: User login(int id); 
+    // 会存储返回值User类 的Field、字段类型、对应的JDBC类型；User类字段的获取是JDBC实现的，通过NativeProtocol
+    // for (int i = 1; i <= columnCount; i++) {
+    //   columnNames.add(configuration.isUseColumnLabel() ? metaData.getColumnLabel(i) :             metaData.getColumnName(i));
+    //   jdbcTypes.add(JdbcType.forCode(metaData.getColumnType(i)));
+    //   classNames.add(metaData.getColumnClassName(i));
+    //}
+    ResultSetWrapper rsw = getFirstResultSet(stmt);
+
+    
+    // 通过statement获取返回的ResultMap，目的将rsw中获取的返回值和resultMap中的字段，进行关联，映射
+    // 这里必须要有ResultMap
+    List<ResultMap> resultMaps = mappedStatement.getResultMaps();
+    int resultMapCount = resultMaps.size();
+    // 验证ResultMap的数量
+    validateResultMapsCount(rsw, resultMapCount);
+    while (rsw != null && resultMapCount > resultSetCount) {
+        // 获取最后一个ResultMap，若存在多个
+        ResultMap resultMap = resultMaps.get(resultSetCount);
+        
+        // ★★★★★
+        // 将SQL执行的结果ResultSet 与ResultMap中的字段值进行映射，将返回结果填充到multipleResult集合中
+        handleResultSet(rsw, resultMap, multipleResults, null);
+        // 获取下一个ResultSet
+        rsw = getNextResultSet(stmt);
+        cleanUpAfterHandlingResultSet();
+        resultSetCount++;
+    }
+
+    String[] resultSets = mappedStatement.getResultSets();
+    if (resultSets != null) {
+        while (rsw != null && resultSetCount < resultSets.length) {
+            ResultMapping parentMapping = nextResultMaps.get(resultSets[resultSetCount]);
+            if (parentMapping != null) {
+                String nestedResultMapId = parentMapping.getNestedResultMapId();
+                ResultMap resultMap = configuration.getResultMap(nestedResultMapId);
+                handleResultSet(rsw, resultMap, null, parentMapping);
+            }
+            rsw = getNextResultSet(stmt);
+            cleanUpAfterHandlingResultSet();
+            resultSetCount++;
         }
+    }
 
-        ResultSetInternalMethods rs = null;
+    // 返回单一的结果集
+    return collapseSingleResultList(multipleResults);
+}
+```
 
-        CachedResultSetMetaData cachedMetadata = null;
+org.apache.ibatis.executor.resultset.DefaultResultSetHandler#handleResultSet
 
-        this.lastQueryIsOnDupKeyUpdate = false;
+**处理SQL语句的执行结果ResultSet，并将返回值与实体类型字段进行映射**
 
-        if (this.retrieveGeneratedKeys) {
-            this.lastQueryIsOnDupKeyUpdate = containsOnDuplicateKeyUpdateInSQL();
-        }
-
-        clearWarnings();
-
-        setupStreamingTimeout(locallyScopedConn);
-
-        this.batchedGeneratedKeys = null;
-
-        PacketPayload sendPacket = fillSendPacket();
-
-        String oldCatalog = null;
-
-        if (!locallyScopedConn.getCatalog().equals(this.getCurrentCatalog())) {
-            oldCatalog = locallyScopedConn.getCatalog();
-            locallyScopedConn.setCatalog(this.getCurrentCatalog());
-        }
-
-        //
-        // Check if we have cached metadata for this query...
-        //
-        boolean cacheResultSetMetadata = locallyScopedConn.getPropertySet().getBooleanReadableProperty(PropertyDefinitions.PNAME_cacheResultSetMetadata)
-                .getValue();
-        if (cacheResultSetMetadata) {
-            cachedMetadata = locallyScopedConn.getCachedMetaData(this.originalSql);
-        }
-
-        boolean oldInfoMsgState = false;
-
-        if (this.retrieveGeneratedKeys) {
-            oldInfoMsgState = locallyScopedConn.isReadInfoMsgEnabled();
-            locallyScopedConn.setReadInfoMsgEnabled(true);
-        }
-
-        //
-        // Only apply max_rows to selects
-        //
-        locallyScopedConn.setSessionMaxRows(this.firstCharOfStmt == 'S' ? this.maxRows : -1);
-
-        rs = executeInternal(this.maxRows, sendPacket, createStreamingResultSet(), (this.firstCharOfStmt == 'S'), cachedMetadata, false);
-
-        if (cachedMetadata != null) {
-            locallyScopedConn.initializeResultsMetadataFromCache(this.originalSql, cachedMetadata, rs);
+```java
+private void handleResultSet(ResultSetWrapper rsw, ResultMap resultMap, List<Object> multipleResults, ResultMapping     parentMapping) throws SQLException {
+    try {
+        if (parentMapping != null) {
+            handleRowValues(rsw, resultMap, null, RowBounds.DEFAULT, parentMapping);
         } else {
-            if (rs.hasRows() && cacheResultSetMetadata) {
-                locallyScopedConn.initializeResultsMetadataFromCache(this.originalSql, null /* will be created */, rs);
+            if (resultHandler == null) {
+                DefaultResultHandler defaultResultHandler = new DefaultResultHandler(objectFactory);
+                // ★★★ 处理每一行的返回值
+                handleRowValues(rsw, resultMap, defaultResultHandler, rowBounds, null);
+                // 将处理结果加入到multipleResults集合中
+                multipleResults.add(defaultResultHandler.getResultList());
+            } else {
+                handleRowValues(rsw, resultMap, resultHandler, rowBounds, null);
             }
         }
-
-        if (this.retrieveGeneratedKeys) {
-            locallyScopedConn.setReadInfoMsgEnabled(oldInfoMsgState);
-            rs.setFirstCharOfQuery(this.firstCharOfStmt);
-        }
-
-        if (oldCatalog != null) {
-            locallyScopedConn.setCatalog(oldCatalog);
-        }
-
-        if (rs != null) {
-            this.lastInsertId = rs.getUpdateID();
-
-            this.results = rs;
-        }
-
-        return ((rs != null) && rs.hasRows());
+    } finally {
+        // issue #228 (close resultsets)
+        closeResultSet(rsw.getResultSet());
     }
+}
+
+```
+
+org.apache.ibatis.executor.resultset.DefaultResultSetHandler#handleRowValues
+
+```java
+public void handleRowValues(ResultSetWrapper rsw, ResultMap resultMap, ResultHandler<?> resultHandler, RowBounds rowBounds, ResultMapping parentMapping) throws SQLException {
+    if (resultMap.hasNestedResultMaps()) {
+        ensureNoRowBounds();
+        checkResultHandler();
+        handleRowValuesForNestedResultMap(rsw, resultMap, resultHandler, rowBounds, parentMapping);
+    } else {
+        // 处理每一行的值
+        handleRowValuesForSimpleResultMap(rsw, resultMap, resultHandler, rowBounds, parentMapping);
+    }
+}
+```
+
+org.apache.ibatis.executor.resultset.DefaultResultSetHandler#handleRowValuesForSimpleResultMap
+
+```java
+private void handleRowValuesForSimpleResultMap(ResultSetWrapper rsw, ResultMap resultMap, ResultHandler<?> resultHandler, RowBounds rowBounds, ResultMapping parentMapping)
+    throws SQLException {
+    DefaultResultContext<Object> resultContext = new DefaultResultContext<Object>();
+    skipRows(rsw.getResultSet(), rowBounds);
+
+    // 使用应该处理多行
+    while (shouldProcessMoreRows(resultContext, rowBounds) && rsw.getResultSet().next()) {
+        ResultMap discriminatedResultMap = resolveDiscriminatedResultMap(rsw.getResultSet(), resultMap, null);
+        // 对每一行的结果进行处理，返回映射完成之后的对象
+        Object rowValue = getRowValue(rsw, discriminatedResultMap);
+        // 存储对象
+        storeObject(resultHandler, resultContext, rowValue, parentMapping, rsw.getResultSet());
+    }
+}
+```
+
+org.apache.ibatis.executor.resultset.DefaultResultSetHandler#getRowValue(org.apache.ibatis.executor.resultset.ResultSetWrapper, org.apache.ibatis.mapping.ResultMap)
+
+处理每一行的值，并将其进行返回
+
+★★★★★
+
+```java
+private Object getRowValue(ResultSetWrapper rsw, ResultMap resultMap) throws SQLException {
+    final ResultLoaderMap lazyLoader = new ResultLoaderMap();
+
+    // 根据ResultMap.getType() 获取返回值的类型，并通过反射的方法创建一个对象，
+    // constructor.newInstance(), ==== 普通的new xxx();
+    Object rowValue = createResultObject(rsw, resultMap, lazyLoader, null);
+    
+    if (rowValue != null && !hasTypeHandlerForResultObject(rsw, resultMap.getType())) {
+        // 创建一个MetaObject对象，
+        // MetaObject对象中originalObject[原始对象]属性为rowValue
+        final MetaObject metaObject = configuration.newMetaObject(rowValue);
+        boolean foundValues = this.useConstructorMappings;
+
+        // 判断是否可以自动映射
+        if (shouldApplyAutomaticMappings(resultMap, false)) {
+            // ★★★ 主要用于将 不能映射的列进行自动映射； 这种主要用于处理返回值类型resultType
+            /**
+             * <select id="login" resultType="com.spring.org.Entity.User">
+             *      select
+             *      u_id,
+             *      u_name,
+             *      u_age,
+             *      u_address
+             *      from user where u_id = #{id};
+             *   </select>
+             */
+            foundValues = applyAutomaticMappings(rsw, resultMap, metaObject, null) || foundValues;
+        }
+        // ★★★ 这里进行属性值映射,即返回值类型为ResultMap,resulMap中已经建立了属性-列明之间的关系；逻辑上与          applyAutomaticMappings基本相同，底层都是通过ResultSet.getXXX(column)的形式获取值，在通过属性-列明之间的对应的关系，给对象的指定属性进行setValue操作。
+        /**
+         *  <resultMap id="complexUser" type="com.spring.org.Entity.User">
+         *      <id property="id" column="u_id"></id>
+         *      <result property="name" column="u_name"></result>
+         *      <result property="age" column="u_age"></result>
+         *      <result property="address" column="u_address"></result>
+         *  </resultMap>
+         *  <select id="login" resultMap="complexUser">
+         *      select
+         *      u_id,
+         *      u_name,
+         *      u_age,
+         *      u_address
+         *      from user where u_id = #{id};
+         *   </select>
+         */
+        foundValues = applyPropertyMappings(rsw, resultMap, metaObject, lazyLoader, null) || foundValues;
+        foundValues = lazyLoader.size() > 0 || foundValues;
+        rowValue = foundValues || configuration.isReturnInstanceForEmptyRow() ? rowValue : null;
+    }
+    // 返回处理结果
+    return rowValue;
+}
+```
+
+org.apache.ibatis.executor.resultset.DefaultResultSetHandler#applyAutomaticMappings
+
+```java
+private boolean applyAutomaticMappings(ResultSetWrapper rsw, ResultMap resultMap, MetaObject metaObject, String columnPrefix) throws SQLException {
+    // 获取 不能映射的列，UnMappedColumnAutoMapping中包好了列名、属性名、类型
+    List<UnMappedColumnAutoMapping> autoMapping = createAutomaticMappings(rsw, resultMap, metaObject, columnPrefix);
+    boolean foundValues = false;
+    if (!autoMapping.isEmpty()) {
+        // 遍历
+        for (UnMappedColumnAutoMapping mapping : autoMapping) {
+            
+            // ★★★ 底层是通过 rs.getXXX(Column)的形式获取，xxx表示的是类型如String、int；这是JDBC来实现的
+            final Object value = mapping.typeHandler.getResult(rsw.getResultSet(), mapping.column);
+            if (value != null) {
+                foundValues = true;
+            }
+            if (value != null || (configuration.isCallSettersOnNulls() && !mapping.primitive)) {
+                // gcode issue #377, call setter on nulls (value is not 'found')
+				// 调用set方法，对指定属性进行赋值操作
+                metaObject.setValue(mapping.property, value);
+            }
+        }
+    }
+    return foundValues;
 }
 ```

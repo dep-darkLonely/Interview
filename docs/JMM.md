@@ -9,13 +9,14 @@
 
 
 > [!Warning|label:CAS轻量级锁中存在的问题:|icon:null]
+>
 > + 经典的**ABA**问题
 > + 自旋问题
 
 > [!Note|label:JMM内存模型:主内存和工作内存|icon:null]
 > + Java线程内存模型跟CPU缓存模型类似，是基于CPU缓存模型建立的；    
 >   CPU执行流程图：    
->   ![CPU执行流程图](./../Image/JMM/jmm_0.jpg)    
+>   ![CPU执行流程图](./Image/JMM/jmm_0.jpg)    
 >   JMM 内存模型图：   
 >   ![JMM内存模型图](./Image/JMM/jmm_1.png)   
 >   如JMM内存模型图所示，有多个线程同时运行在不同的CPU上，同时读取一个static变量或者实例变量，为了提高运行速度，会把主内存中的共享变量加载到工作内存中去。所以

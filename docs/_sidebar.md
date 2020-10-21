@@ -39,7 +39,6 @@
 
     - [MyBatis框架学习](MybatisFramework.md)
 
-
 * 中间件
     - [Redis框架知识](Redis_2.md)
 
@@ -47,10 +46,10 @@
 
     - [RocketMQ进阶](RocketMQ_2.md)
 
-* 数据库
-    - [MySQL数据库](MYSQL.md)
+* [MySQL数据库](MYSQL.md)
 
 * [阿里巴巴分布式、微服务SpringCloudAlibaba](SpringCloudAlibaba.md)
+
 * [Changelog](changelog.md)
 
     - 1.0.0 (2020/06/18)

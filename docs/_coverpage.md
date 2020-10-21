@@ -13,4 +13,4 @@
 - 分布式、微服务： AlibabaCloud
 
 [Github](https://github.com/dep-darkLonely/Interview)
-[Get Started](#Interview)
+[Get Started](./BasicProblem.md)

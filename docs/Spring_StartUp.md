@@ -330,7 +330,7 @@ expressed interest in or if it is annotated with any of the classes specified vi
 ```
 [Servelt3.1规范PDF](https://download.oracle.com/otn-pub/jcp/servlet-3_1-fr-eval-spec/servlet-3_1-final.pdf)
 
-![SPI](/Image/Spring/SPI.jpg)
+![SPI](./Image/Spring/SPI.jpg)
 
 ```java
 // 设置@HandlesTypes 感兴趣的类，可以获取WebApplicationInitializer的所有子类

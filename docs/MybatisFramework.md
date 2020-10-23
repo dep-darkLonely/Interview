@@ -2,7 +2,7 @@
 
 Mybatis流程图
 
-![Mybatis流程图](./Image/Mybatis/MybatisHandlerProcess.png)
+![Mybatis流程图](./Image/Mybatis/MybatisHandlerProcess.jpg)
 
 ### 1. 创建Mybatis配置文件信息
 

@@ -1,0 +1,29 @@
+########################## 生产环境 #########################
+
+# 指定端口号
+server:
+  port: 80
+
+spring:
+  main:
+    # 启动log
+    log-startup-info: true
+
+  application:
+    name: TransactionManager
+    # 数据库连接
+  datasource:
+    type: org.apache.ibatis.datasource.pooled.PooledDataSource
+    url: jdbc:mysql://localhost:3306/transactionManager?useUnicode=true&amp;characterEncoding=utf-8&amp;useSSL=true&amp;serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# mybatis 配置文件
+mybatis:
+  mapper-locations:
+
+# log 配置
+logging:
+  level:
+   root: debug

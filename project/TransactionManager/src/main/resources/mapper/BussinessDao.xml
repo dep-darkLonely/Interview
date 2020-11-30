@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.spring.transaction.demo.dao">
+
+    <resultMap id="bussinessMap" type="bussiness">
+        <id column="id" property="id"></id>
+        <result column="name" property="name"></result>
+        <result column="alias" property="alias"></result>
+        <result column="produce_date" property="produceDate"></result>
+        <result column="production" property="production"></result>
+        <result column="price" property="price"></result>
+        <result column="stock" property="stock"></result>
+        <result column="tags" property="tags"></result>
+<!--        <collection property="tags" javaType="arrayList" ofType="string">-->
+<!--            <constructor>-->
+<!--                <arg column="tags"></arg>-->
+<!--            </constructor>-->
+<!--        </collection>-->
+    </resultMap>
+
+    <sql id="fieldAlias">
+        id,
+        name,
+        alias,
+        produce_date as "produceDate",
+        production,
+        price,
+        stock,
+        tags
+    </sql>
+
+    <insert id="add" parameterType="bussiness">
+        insert into bussiness (
+            name,
+            alias,
+            produce_date,
+            production,
+            price,
+            stock,
+            tags
+        ) values (
+            #{name},
+            #{alias},
+            #{produceDate},
+            #{production},
+            #{price},
+            #{stock},
+            #{tags}
+        )
+    </insert>
+
+    <delete id="delete" parameterType="long">
+        delete from bussiness where id = {#id}
+    </delete>
+
+    <update id="update" parameterType="bussiness">
+        update bussiness set
+        alias = #{alias}
+        production = #{production}
+        price = #{price}
+        tags = #{tags}
+        where id = #{id}
+    </update>
+
+    <select id="get" parameterType="long" resultType="bussiness">
+        select
+        <include refid="fieldMapper"></include>
+        from bussiness where id = #{id}
+    </select>
+
+    <select id="list" parameterType="bussiness" resultType="bussinessMap" >
+        select
+        <include refid="fieldMapper"></include>
+        from bussiness
+        <where>
+            <if test="name != null and name != ''">
+                and name = #{name}
+            </if>
+
+            <if test="tags != null and tags != ''">
+                and tags like contact('%', #{tags}, '%')
+            </if>
+        </where>
+    </select>
+
+</mapper>

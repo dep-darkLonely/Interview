@@ -9,21 +9,47 @@ spring:
     # 启动log
     log-startup-info: true
 
+
   application:
     name: TransactionManager
     # 数据库连接
   datasource:
-    type: org.apache.ibatis.datasource.pooled.PooledDataSource
     url: jdbc:mysql://localhost:3306/transactionManager?useUnicode=true&amp;characterEncoding=utf-8&amp;useSSL=true&amp;serverTimezone=Asia/Shanghai
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
+    ping-query: select * from dual
+    maximum-active-connections: 10
+    maximum-idle-connections: 5
+
+  # 模板引擎
+  thymeleaf:
+    cache: true
+    check-template: true
+    check-template-location: true
+    prefix: classpath:/templates/
+    suffix: .html
+  messages:
+    # 指定语言不存在时，使用系统默认语言
+    fallback-to-system-locale: true
+    encoding: UTF-8
+    basename: message,config.i18n.messages
 
 # mybatis 配置文件
 mybatis:
-  mapper-locations:
+  type-aliases-package: com.spring.transaction.demo
+  configuration:
+    cache-enabled: true
+    default-fetch-size: 100
+    default-statement-timeout: 25
+  # 配置Mapper.xml文件
+  mapper-locations: classpath:/mapper/*.xml
+
 
 # log 配置
 logging:
   level:
-   root: debug
+   root: INFO
+   sample:
+     mybatis:
+       mapper: TRACE

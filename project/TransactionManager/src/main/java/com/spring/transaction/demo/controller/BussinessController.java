@@ -74,6 +74,7 @@ public class BussinessController {
 					null,
 					LocaleContextHolder.getLocale()
 			));
+			return  response;
 		}
 		int result = service.delete(id);
 		if (result > 0) {

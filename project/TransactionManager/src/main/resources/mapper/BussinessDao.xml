@@ -3,13 +3,13 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.spring.transaction.demo.dao">
+<mapper namespace="com.spring.transaction.demo.dao.BussinessDao">
 
     <resultMap id="bussinessMap" type="bussiness">
         <id column="id" property="id"></id>
         <result column="name" property="name"></result>
         <result column="alias" property="alias"></result>
-        <result column="produce_date" property="produceDate"></result>
+        <result column="produceDate" property="produceDate"></result>
         <result column="production" property="production"></result>
         <result column="price" property="price"></result>
         <result column="stock" property="stock"></result>
@@ -32,7 +32,7 @@
         tags
     </sql>
 
-    <insert id="add" parameterType="bussiness">
+    <insert id="add" useGeneratedKeys="true" parameterType="bussiness">
         insert into bussiness (
             name,
             alias,
@@ -53,27 +53,27 @@
     </insert>
 
     <delete id="delete" parameterType="long">
-        delete from bussiness where id = {#id}
+        delete from bussiness where id = #{id}
     </delete>
 
     <update id="update" parameterType="bussiness">
         update bussiness set
-        alias = #{alias}
-        production = #{production}
-        price = #{price}
+        alias = #{alias},
+        production = #{production},
+        price = #{price},
         tags = #{tags}
         where id = #{id}
     </update>
 
     <select id="get" parameterType="long" resultType="bussiness">
         select
-        <include refid="fieldMapper"></include>
+        <include refid="fieldAlias"></include>
         from bussiness where id = #{id}
     </select>
 
-    <select id="list" parameterType="bussiness" resultType="bussinessMap" >
+    <select id="list" parameterType="bussiness" resultMap="bussinessMap" >
         select
-        <include refid="fieldMapper"></include>
+        <include refid="fieldAlias"></include>
         from bussiness
         <where>
             <if test="name != null and name != ''">

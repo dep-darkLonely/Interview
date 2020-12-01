@@ -11,14 +11,10 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 @EnableWebMvc   // 启用SpringMVC
 @EnableTransactionManagement // 启用事务
 //@MapperScan(basePackages = "com.spring.transaction.demo.dao") // Mybatis 包扫描
-public class DemoApplication implements CommandLineRunner {
+public class DemoApplication {
 	
 	public static void main(String[] args) {
 		SpringApplication.run(DemoApplication.class, args);
 	}
 	
-	@Override
-	public void run(String... args) throws Exception {
-	
-	}
 }

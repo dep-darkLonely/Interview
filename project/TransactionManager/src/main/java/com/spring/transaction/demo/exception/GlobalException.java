@@ -1,13 +1,9 @@
 package com.spring.transaction.demo.exception;
 
 import com.spring.transaction.demo.common.ResponseJson;
-import org.springframework.http.HttpRequest;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 
 @RestControllerAdvice(

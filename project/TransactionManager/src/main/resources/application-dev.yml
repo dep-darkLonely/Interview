@@ -14,7 +14,7 @@ spring:
     name: TransactionManager
     # 数据库连接
   datasource:
-    url: jdbc:mysql://localhost:3306/transactionManager?useUnicode=true&amp;characterEncoding=utf-8&amp;useSSL=true&amp;serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/transactionManager?serverTimezone=UTC&useUnicode=true&characterEncoding=utf8
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -23,17 +23,17 @@ spring:
     maximum-idle-connections: 5
 
   # 模板引擎
-  thymeleaf:
-    cache: true
-    check-template: true
-    check-template-location: true
-    prefix: classpath:/templates/
-    suffix: .html
+#  thymeleaf:
+#    cache: true
+#    check-template: true
+#    check-template-location: true
+#    prefix: classpath:/templates/
+#    suffix: .html
   messages:
     # 指定语言不存在时，使用系统默认语言
     fallback-to-system-locale: true
     encoding: UTF-8
-    basename: message,config.i18n.messages
+    basename: i18n.messages
 
 # mybatis 配置文件
 mybatis:
@@ -49,7 +49,10 @@ mybatis:
 # log 配置
 logging:
   level:
-   root: INFO
+   root: debug
    sample:
      mybatis:
-       mapper: TRACE
+       mapper: debug
+  file:
+    path: .
+    name: transactionManager.log

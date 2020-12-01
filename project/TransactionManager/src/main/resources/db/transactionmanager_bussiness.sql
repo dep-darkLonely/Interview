@@ -23,17 +23,18 @@ DROP TABLE IF EXISTS `bussiness`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
  SET character_set_client = utf8mb4 ;
 CREATE TABLE `bussiness` (
-  `id` bigint(20) NOT NULL,
-  `name` varchar(45) COLLATE utf8_bin NOT NULL,
-  `alias` varchar(45) COLLATE utf8_bin DEFAULT NULL,
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(45) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
+  `alias` varchar(45) CHARACTER SET utf8 COLLATE utf8_bin DEFAULT NULL,
   `produce_date` bigint(15) DEFAULT NULL,
-  `production` decimal(10,0) NOT NULL,
+  `production` varchar(30) CHARACTER SET utf8 COLLATE utf8_bin DEFAULT NULL,
+  `price` decimal(10,0) NOT NULL,
   `stock` bigint(10) NOT NULL,
-  `tags` varchar(45) COLLATE utf8_bin DEFAULT NULL,
+  `tags` varchar(45) CHARACTER SET utf8 COLLATE utf8_bin DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `uniqueIndex` (`name`),
   KEY `combineIndex` (`name`,`tags`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -42,6 +43,7 @@ CREATE TABLE `bussiness` (
 
 LOCK TABLES `bussiness` WRITE;
 /*!40000 ALTER TABLE `bussiness` DISABLE KEYS */;
+INSERT INTO `bussiness` VALUES (2,'奥利奥','超好吃的奥利奥',1603123200000,'陕西省宝鸡市',105,10000,'超级好吃,值得推荐, 很nice');
 /*!40000 ALTER TABLE `bussiness` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -54,4 +56,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2020-11-30 18:29:38
+-- Dump completed on 2020-12-01 11:09:04
